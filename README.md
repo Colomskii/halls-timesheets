@@ -1,52 +1,113 @@
-# Hall's Timesheets — initial React / Firebase implementation
+# Hall's Timesheets · v0.2 — Employee account management
 
-An online implementation of the user-provided **HB.FRM.82 Rev 10 — Fatigue Risk Management** timesheet. Features: employee sign-in, employee-only history, draft/submission workflow, expandable rows, A4 landscape continuation printing, administrator review, employee register, and restrictive Firestore rules.
+React + Vite + Firestore + Firebase Authentication + Netlify Functions. The digital timesheet is based on HB.FRM.82 Rev 10 (Fatigue Risk Management).
 
-## 1. Prepare Firebase
+## What's new in v0.2
 
-1. In your newly created Firebase project, add a **Web app** (Project settings → Your apps) and copy the Firebase config.
-2. Authentication → Sign-in method → enable **Email/Password**.
-3. Firestore Database → create a database (production mode preferred).
-4. Firestore Database → **Rules** → paste **the entire `firestore.rules`** file → Publish. This ruleset replaces the rules for the selected database; use a dedicated Firebase project/database.
-5. Authentication → Users → **Add user** for your initial administrator, for example `admin@halls-timesheets.local`. Use a strong password. Copy the generated **UID** (do not copy the email into the UID field).
-6. Firestore Database → Start collection `users` → Document ID **exactly the administrator UID**. Add fields: `displayName` (string) `Administrator`, `role` (string) `admin`, `active` (boolean) `true`, `username` (string) `admin`. **Only manually create this initial administrator profile in the Firebase Console.** Creating admin roles must remain restricted after bootstrap.
-7. Optionally create `staffDirectory/{admin UID}` with the same displayName, role, active, username fields so this account appears in the employee register.
+The **Employee register** now provides a single, understandable workflow for administrators:
 
-### How employee accounts are created in v0.1
+- Click **Add employee**, enter full name, username, employment status and role.
+- A strong temporary password is pre-generated (or may be changed). Click **Create employee account**.
+- Firebase Authentication assigns the UID automatically; the trusted backend creates both `users/{uid}` and `staffDirectory/{uid}`.
+- The username and temporary password are shown **once**, for private sharing with the employee. No copy of the password is stored in Firestore.
+- Admins can **edit** name/username/status/role, **deactivate** an account or **reset** its password.
+- Employees and admins have an **Account settings** screen to change their own passwords.
+- Accounts created by this app use `<username>@halls-timesheets.local` internally. Employees type **just the username** to sign in; they are not asked to provide an email address. This synthetic address cannot receive password-reset emails, so the admin reset workflow is important.
 
-In Authentication → Users, create an account with email `<username>@halls-timesheets.local` (e.g. `mark@halls-timesheets.local`) and a temporary password. Copy its UID. Sign into the web app as admin → Employee register → Add employee → paste the UID, display name, username and role `staff`, then save. The username login translates to `<username>@halls-timesheets.local`. You may also use actual email addresses and log in with the full address. **The register does not create Firebase Auth users, send passwords or reset passwords in v0.1.** Secure in-app account provisioning requires a trusted backend (e.g. a callable Cloud Function using the Admin SDK). Never embed Admin SDK service-account credentials in the browser.
+## REQUIRED one-time deployment setup (GitHub ↔ Netlify already connected)
 
-## 2. Run locally
+### 1. Firebase rules
+
+Open **Firebase Console → Firestore Database → Rules** and replace the existing rules with **the complete `firestore.rules`** included in this release. Publish the rules. The update makes employee profile writes **server-only**, leaving staff read access and the timesheet permissions in place.
+
+**Important:** Do not replace rules for another unrelated app sharing the same database. This project assumes its own Firestore database.
+
+### 2. Netlify server-side Firebase credential
+
+Creating Authentication accounts for other people requires a trusted backend. The new Netlify Function (`netlify/functions/staff.mjs`) uses the Firebase Admin SDK. It must be configured with a **server-only** service account key.
+
+1. In Firebase Console, open **Project settings → Service accounts → Firebase Admin SDK → Generate new private key**. Download the JSON file to a secure location. Treat this like a master password for the Firebase project.
+2. In a terminal **on your own computer**, create a single-line JSON representation, for example: `node -e "const fs=require('fs');process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync('serviceAccountKey.json','utf8'))))"` (replace the file path). Do **not** share or commit this key.
+3. Open **Netlify → Site/Project configuration → Environment variables**.
+4. Add the variable `FIREBASE_SERVICE_ACCOUNT_JSON`. Paste the **entire single-line JSON object** as its value. Set the scope to **Functions** (or **All** if the UI does not allow functions-only). Allow **Production**; also allow **Local development (`dev`)** if you intend to test with Netlify Dev.
+5. Ensure the existing public variables (`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_PROJECT_ID`, etc.) remain configured for the **Builds** environment. Your current `.env` should continue to use only these `VITE_*` public config fields.
+6. Trigger a new Netlify deploy. Netlify detects `netlify/functions/staff.mjs` automatically from `netlify.toml` and installs `firebase-admin` from `package.json`.
+7. Delete the downloaded key from unencrypted locations if no longer needed, and keep any retained copy somewhere secure. **Never put the key in GitHub, `.env.example`, a React component, or a `VITE_*` variable.**
+
+The service account allows privileged Firebase operations. Rotate/revoke the key immediately if accidentally exposed.
+
+### 3. First administrator
+
+Continue using the existing admin account that was created during the original setup. Only the **initial bootstrap admin** needs a manually-created `users/{adminUID}` Firestore document (with role `admin` and active `true`). All new employees are created entirely in the UI.
+
+If the original administrator was manually created with a genuine email address, they can continue signing in with that email address. Their email is not silently replaced when editing their record.
+
+### 4. Deploy the updated files
+
+Extract this version into your existing Git repository (replacing matching files). Keep your current `.env` file and **do not delete your Firebase data**. From the repo directory:
 
 ```bash
 npm install
-cp .env.example .env
-# Fill .env with values from Firebase Project settings > Your apps > SDK setup/config
-npm run dev
+npm run build
+git add -A
+git commit -m "Employee register - automatic account creation"
+git push
 ```
 
-Open the local Vite URL. Build with `npm run build` and deploy the `dist` directory to Netlify. For Netlify/GitHub deploys, add the same `VITE_FIREBASE_*` environment variables under **Site configuration → Environment variables**; build command `npm run build`, publish directory `dist`. Register the Netlify website domain under Firebase Authentication → Settings → Authorized domains. No secret server key belongs in the Vite environment file. Firebase web app config is public; security is provided by Authentication and Firestore rules.
+Netlify deploys the updated `main` branch automatically.
 
-## 3. Operating rules
+### 5. Testing account creation
 
-- Employees may create drafts, save and submit their own timesheets, and view/print previously saved submissions. Approved/submitted sheets are read-only for employees; returned sheets can be corrected.
-- Administrators may view all sheets, set office-use fields, return for correction, or approve; the employee UID remains immutable.
-- Dynamic row entry prints 9 **populated** rows per landscape A4 page. Each page repeats headers; the final page includes the original safety notes, declaration and manager approval section.
-- The HSE fatigue/risk scores are **manual office-use fields**. The app does **not** implement the HSE FRI calculator or independently certify safe shift patterns.
-- Declaration typed name/date are an acknowledgement record, **not a verified electronic signature**. The source document includes a 48-hour Working Time Regulations opt-out. Confirm any organisational legal and signature requirements before using this system as a replacement for signed paper forms.
-- Audit logs are best-effort client writes and **are not tamper-proof or guaranteed**. For robust audit integrity, move logging and review actions to a trusted server-side Cloud Function.
-- The HTML timesheet is styled to closely follow the source layout; verify printing on your target browser/printer before operational use.
+Open the deployed Netlify site and sign in as an administrator. Select **Employee register → Add employee**; enter a test name, username and role **Employee**. Create the account, copy the credentials, sign out and log back in as the new user. Check that the employee can see **My timesheets** but cannot view the admin employee register.
 
-## 4. Future production improvements
+Verify that the new record appears in **Firebase → Authentication → Users** and both Firestore collections `users` and `staffDirectory`. Those documents should share the automatically-generated UID; you should never need to handle it manually.
 
-- Secure cloud-function staff provisioning and password reset, without exposing Admin SDK credentials.
-- Audit history maintained server-side; email alerts for submissions; server-side computed fatigue score via validated HSE FRI model; stronger field validation and week-period constraints.
-- Signature process compliant with your organisation's requirements; pagination QA using real data; Firebase Emulator Suite tests for access rules.
+## Local development
 
-## File layout
+For timesheet editor UI alone, `npm run dev` still works. **Employee creation/reset requires a Netlify Function** and therefore will not work in a plain Vite server.
 
-- `src/App.jsx`: screens, form, pagination, history and review.
-- `src/styles.css`: interactive UI and printable page styling.
-- `src/firebase.js`: Firebase initialization.
-- `firestore.rules`: database access policy.
-- `.env.example`: required Firebase web configuration variables.
+To test the entire application locally with Netlify Functions:
+
+```bash
+npm install
+npx netlify-cli login
+npx netlify-cli link
+npx netlify-cli dev
+```
+
+Netlify Dev uses the linked site's environment variables if their deploy context includes `dev` or `all`. Use `npx netlify-cli dev --context production` only if you intentionally need production variables locally and understand you will be writing to the **real production Firebase database**.
+
+Your existing local `.env` is gitignored. Do not put the service-account JSON in any frontend file. For initial verification, testing the live Netlify URL is simpler than setting up local backend credentials.
+
+## Security notes
+
+- The Netlify Function checks the Firebase ID token and also reads the `users/{callerUid}` document to confirm the caller is an **active admin**. No UID from the browser is trusted as proof of permission.
+- Only the server can create/update `users` and `staffDirectory` documents; staff are limited to their own profile and timesheets, and admins can read staff records.
+- A user cannot deactivate or demote their own admin account via the management function; the last remaining active admin is protected.
+- Passwords are passed only for the HTTPS request to Firebase Admin SDK, not stored in Firestore. Temporary credentials must be passed to employees privately.
+- Disabling an employee disables their Firebase Authentication account, not just their visible profile.
+- Separate `staffAuditLogs` records are written by the backend for account creation, updates and password resets.
+- For employees using synthetic `.local` emails, **email-based password recovery is not available**. Contact the administrator for a new temporary password.
+- Continue to test the original form's print formatting and signature process before using it for formal compliance documentation.
+
+## Other functionality unchanged
+
+Employees can create editable drafts, add rows, submit declarations, access their prior timesheets and print. Admins can review all timesheets, return them or approve them; continuation pages print at approximately nine completed entries per page. Risk/fatigue scores remain manual office-use fields.
+
+## Project layout
+
+- `src/App.jsx` — Timesheet screens and employee navigation.
+- `src/StaffRegister.jsx` — User-friendly employee manager (no UID field).
+- `src/AccountSettings.jsx` — Personal password change.
+- `src/styles.css` — Application/print styling.
+- `netlify/functions/staff.mjs` — **Privileged** create/update/reset function (server-only).
+- `netlify.toml` — Build, functions and SPA routing configuration.
+- `firestore.rules` — Firestore client access restrictions.
+- `.env.example` — Public Firebase web configuration only.
+
+### References
+
+- Firebase Admin SDK account management: https://firebase.google.com/docs/auth/admin/manage-users
+- Firebase Admin SDK setup and service-account key precautions: https://firebase.google.com/docs/admin/setup
+- Netlify Functions configuration: https://docs.netlify.com/build/functions/configuration/
+- Netlify Dev local functions: https://docs.netlify.com/api-and-cli-guides/cli-guides/local-development/

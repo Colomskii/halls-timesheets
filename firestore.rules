@@ -22,16 +22,18 @@ service cloud.firestore {
     match /users/{uid} {
       allow get: if owner(uid) || admin();
       allow list: if admin();
-      // Profiles are created by an already-authorised administrator or via Firebase Console bootstrap.
-      allow create: if admin() && request.resource.data.keys().hasAll(['role','active','displayName'])
-        && request.resource.data.role in ['staff','admin'];
-      allow update: if admin() && request.resource.data.role in ['staff','admin'];
-      allow delete: if admin();
+      // All account mutations use the trusted Netlify function (Admin SDK).
+      // This prevents direct client-side role or employee-account manipulation.
+      allow create, update, delete: if false;
     }
     match /staffDirectory/{uid} {
       allow get: if owner(uid) || admin();
       allow list: if admin();
-      allow create, update, delete: if admin();
+      allow create, update, delete: if false;
+    }
+    match /staffAuditLogs/{logId} {
+      allow read: if admin();
+      allow write: if false;
     }
     match /timesheets/{sheetId} {
       allow get: if active() && (resource.data.employeeId == request.auth.uid || admin());
