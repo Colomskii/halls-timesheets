@@ -175,11 +175,15 @@ function openTimesheetPrintView() {
     doc.getElementById('printMount').appendChild(source.cloneNode(true));
     doc.getElementById('doPrint').addEventListener('click', () => preview.print());
     doc.getElementById('closePrint').addEventListener('click', () => preview.close());
-    preview.focus();
-    // Open the native dialogue automatically, with a manual button as fallback.
-    preview.requestAnimationFrame(() => preview.requestAnimationFrame(() => {
-      if (!preview.closed) preview.print();
-    }));
+    // Match the working macOS Safari print sequence from the Longcroft rota:
+    // allow the standalone document's @page landscape rule to settle before
+    // focusing the popup and invoking the native print dialogue.
+    // Unlike the previous double-requestAnimationFrame call, this waits 500 ms.
+    preview.setTimeout(() => {
+      if (preview.closed) return;
+      preview.focus();
+      preview.print();
+    }, 500);
   } catch (error) {
     console.error('Print preview failed:', error);
     preview.close();
