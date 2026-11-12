@@ -295,3 +295,252 @@
   .screenPaper { display: none !important; }
   .printOnly { display: block !important; }
 }
+
+
+/* ========================================================================
+   v0.7 - Hall's Timesheets mobile visual refresh
+   Original HB.FRM.82 print / PDF document remains completely unchanged.
+   ======================================================================== */
+@media screen and (max-width: 900px) {
+  .mobileShiftEditor {
+    --frm-ink: #1c2831;
+    --frm-ink-light: #283e4a;
+    --frm-green: #8aa953;
+    --frm-yellow: #ffe39b;
+    --frm-risk: #f7e45a;
+    --frm-fatigue: #c54d52;
+  }
+
+  /* Letterhead-inspired details block, with clean separation of form fields. */
+  .mobileSheetDetails {
+    border: 1px solid #cbd7dd;
+    border-radius: 12px;
+    overflow: hidden;
+    padding: 15px;
+    box-shadow: 0 2px 7px rgb(28 40 49 / 4%);
+  }
+  .mobileIdentity {
+    margin: -15px -15px 17px;
+    padding: 14px 16px;
+    border-bottom: 0;
+    background: var(--frm-ink);
+  }
+  .mobileIdentity > span { color: #c3d2d8; }
+  .mobileIdentity strong { color: #fff; font-size: 17px; }
+  .mobileMetaGrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 11px; }
+  .mobileMetaGrid > label { min-width: 0; margin: 0; }
+  .mobileMetaGrid label, .mobileShiftFields label, .mobileOfficeGrid label { min-width: 0; }
+  .mobileMetaGrid label > input, .mobileMetaGrid label > .mobilePicker {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .mobileMetaGrid input:not([type='month']) {
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
+    font-size: 16px;
+  }
+  .mobileMetaGrid .mobileMetaFull { grid-column: 1 / -1; }
+
+  /* Native date & month inputs overlay a fixed-size visual input.
+     This avoids iOS Safari's intrinsic minimum width and extra-tall UI. */
+  .mobilePicker {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
+    border: 1px solid #c5d3d9;
+    border-radius: 7px;
+    background: #fff;
+    padding: 0 12px;
+    overflow: hidden;
+    color: var(--frm-ink);
+  }
+  .mobilePickerText {
+    display: block;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 24px;
+    pointer-events: none;
+  }
+  .mobilePicker.isEmpty .mobilePickerText { color: #7c8a93; font-weight: 400; }
+  .mobilePickerIcon { display: block; flex: 0 0 auto; color: #57707d; pointer-events: none; }
+  .mobilePicker input[type='date'],
+  .mobilePicker input[type='month'] {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 1;
+    box-sizing: border-box !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    opacity: 0 !important;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .mobilePicker:focus-within {
+    outline: 2px solid #407b98;
+    outline-offset: 2px;
+    border-color: #407b98;
+  }
+  .mobilePicker.isDisabled { background: #f2f5f6; color: #677681; }
+
+  /* Shift cards borrow the document's dark charcoal table headings. */
+  .mobileShiftCard { border-color: #c5d2d9; }
+  .mobileShiftCard.isExpanded { border-color: var(--frm-ink-light); }
+  .mobileShiftToggle {
+    background: var(--frm-ink);
+    color: #fff;
+    min-height: 72px;
+  }
+  .mobileShiftToggle > svg { color: #c2d0d6; }
+  .mobileShiftSummary strong { color: #fff; font-size: 14px; }
+  .mobileShiftSummary small { color: #c0cbd1; }
+  .mobileShiftNumber { background: #e7eef1; color: #233e4a; }
+  .mobileShiftState.isBlank { background: #e7edf0; color: #445865; }
+  .mobileShiftState.isIncomplete { background: #ffe39b; color: #5a420d; }
+  .mobileShiftBody { background: #fff; border-top: 0; }
+  .mobileShiftFields input:not([type='date']),
+  .mobileShiftFields select { min-width: 0; max-width: 100%; }
+  .mobileShiftFields .mobileField-start input,
+  .mobileShiftFields .mobileField-finish input {
+    background: #f0f5f7;
+    border-color: #c3d2db;
+  }
+  .mobileShiftFields .mobileField-location input { background: #f7f9fa; }
+  .mobileShiftFields .mobileField-onCall select,
+  .mobileShiftFields .mobileField-breaks select {
+    background: #f5f8fa;
+    border-color: #c3d2db;
+  }
+  .mobileEyebrow { color: #455e6a; }
+  .mobileCount { border-color: #cad7dd; color: var(--frm-ink-light); }
+
+  /* Reuse the original green OFFICE USE banner and table highlight colours. */
+  .mobileOfficeDetails {
+    margin-top: 20px;
+    padding: 0;
+    border: 1px solid #c2d2a4;
+    border-radius: 9px;
+    background: #f7f9f3;
+    overflow: hidden;
+  }
+  .mobileOfficeDetails > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 48px;
+    margin: 0;
+    padding: 8px 11px;
+    list-style: none;
+    color: var(--frm-ink);
+    background: #eff4e7;
+  }
+  .mobileOfficeDetails > summary::-webkit-details-marker { display: none; }
+  .mobileOfficeDetails > summary:focus-visible { outline: 2px solid #3a7391; outline-offset: -3px; }
+  .mobileOfficeBadge {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    min-height: 29px;
+    padding: 5px 8px;
+    background: var(--frm-green);
+    border-radius: 4px;
+    color: #162314;
+    font-size: 11px;
+    font-weight: 850;
+    letter-spacing: .04em;
+  }
+  .mobileOfficeSummary { font-size: 11px; font-weight: 650; color: #4c6150; min-width: 0; flex: 1; }
+  .mobileOfficeChevron { flex: 0 0 auto; color: #425c45; transition: transform .16s ease; }
+  .mobileOfficeDetails[open] .mobileOfficeChevron { transform: rotate(180deg); }
+  .mobileOfficeDetails[open] > summary { border-bottom: 1px solid #c9d8b5; }
+  .mobileOfficeGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px;
+    margin: 0;
+  }
+  .mobileOfficeGrid .mobileOfficeField {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid #cfd9dc;
+    border-radius: 6px;
+    background: #fff;
+    min-width: 0;
+    font-size: 11px;
+  }
+  .mobileOfficeField > span {
+    display: flex;
+    align-items: center;
+    min-height: 39px;
+    padding: 8px 10px;
+    line-height: 1.25;
+    background: #dfe7eb;
+    color: #233641;
+    font-weight: 750;
+  }
+  .mobileOfficeGrid .mobileOfficeField input {
+    min-width: 0;
+    min-height: 45px;
+    height: 45px;
+    padding: 10px;
+    border: 0;
+    border-top: 1px solid #ced8dc;
+    border-radius: 0;
+    font-size: 16px;
+  }
+  .mobileOffice-working > span,
+  .mobileOffice-shiftsClaim > span { background: var(--frm-yellow); color: #382e1b; }
+  .mobileOffice-working input,
+  .mobileOffice-shiftsClaim input { background: #fff8e7; }
+  .mobileOffice-risk > span { background: var(--frm-risk); color: #24231a; }
+  .mobileOffice-risk input { background: #fffceb; }
+  .mobileOffice-fatigue > span { background: var(--frm-fatigue); color: #fff; }
+  .mobileOffice-fatigue input { background: #fff4f3; }
+
+  /* Green manager section; charcoal document/declaration headers. */
+  .officeInputs { border: 1px solid #c3d3a8; overflow: hidden; }
+  .officeInputs > h3 {
+    margin: -17px -17px 16px;
+    padding: 13px 17px;
+    background: var(--frm-green);
+    color: #162314;
+    font-size: 16px;
+  }
+  .declarationBox { border-top: 4px solid var(--frm-ink); }
+  .mobileRequirements { border-color: #bdcdd5; }
+  .mobileRequirements > button { background: var(--frm-ink); color: #fff; }
+  .mobileOriginalToggle { border-color: #afc0c8; color: var(--frm-ink); }
+}
+
+@media screen and (max-width: 360px) {
+  .mobileMetaGrid { grid-template-columns: minmax(0, 1fr); }
+  .mobileMetaGrid .mobileMetaFull { grid-column: auto; }
+  .mobileOfficeGrid { grid-template-columns: minmax(0, 1fr); }
+}

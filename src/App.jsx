@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { auth, db, isConfigured } from './firebase';
-import { Plus, Printer, Download, FileText, LogOut, Users, ClipboardList, ArrowLeft, Save, Send, Check, RotateCcw, Trash2, Settings, ChevronDown, ChevronUp, Copy, Eye, EyeOff } from 'lucide-react';
+import { Plus, Printer, Download, FileText, LogOut, Users, ClipboardList, ArrowLeft, Save, Send, Check, RotateCcw, Trash2, Settings, ChevronDown, ChevronUp, Copy, Eye, EyeOff, CalendarDays } from 'lucide-react';
 import StaffRegister from './StaffRegister';
 import AccountSettings from './AccountSettings';
 
@@ -339,6 +339,28 @@ function formatShiftDate(value) {
   const date = new Date(year,month-1,day,12);
   return date.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
 }
+// A stable visual shell for mobile native pickers. The real input stays
+// interactive (and accessible) above the text, but its intrinsic Safari sizing
+// cannot stretch the card or overlap neighbouring fields.
+function formatMobilePickerValue(type, value) {
+  if (type === 'month' && /^\d{4}-\d{2}$/.test(value || '')) {
+    const [year, month] = value.split('-').map(Number);
+    return new Date(year, month - 1, 1, 12).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  }
+  if (type === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(value || '')) {
+    const [year, month, day] = value.split('-').map(Number);
+    return new Date(year, month - 1, day, 12).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  return type === 'date' ? 'Select shift date' : 'Select month';
+}
+function MobileNativePicker({ type, value, disabled, ...inputProps }) {
+  return <span className={`mobilePicker mobilePicker-${type} ${!value ? 'isEmpty' : ''} ${disabled ? 'isDisabled' : ''}`}>
+    <span className="mobilePickerText" aria-hidden="true">{formatMobilePickerValue(type, value)}</span>
+    <CalendarDays className="mobilePickerIcon" size={18} aria-hidden="true" />
+    <input {...inputProps} type={type} value={value || ''} disabled={disabled} />
+  </span>;
+}
+
 function Timesheet({sheet,setSheet,editable,admin}){
   const rows=safeRows(sheet.rows);
   const update=(key,value)=>setSheet(s=>({...s,[key]:value}));
@@ -390,6 +412,7 @@ function Timesheet({sheet,setSheet,editable,admin}){
     return <label key={key} className={`mobileField mobileField-${key}`} htmlFor={id}>
       <span>{label}{required&&<span aria-hidden="true" className="requiredStar"> *</span>}</span>
       {type==='select'?<select {...common}><option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option></select>
+        :type==='date'?<MobileNativePicker {...common} type="date" aria-label={label} />
         :<input {...common} type={type} placeholder={placeholder||''} inputMode={['start','finish'].includes(key)?'numeric':undefined} autoComplete="off"/>}
     </label>;
   }
@@ -407,7 +430,7 @@ function Timesheet({sheet,setSheet,editable,admin}){
       <div className="mobileSheetDetails">
         <div className="mobileIdentity"><span>Employee</span><strong>{sheet.employeeName||'Employee'}</strong></div>
         <div className="mobileMetaGrid">
-          <label>Month<input type="month" disabled={!editable} value={sheet.period||''} onChange={e=>update('period',e.target.value)}/></label>
+          <label>Month<MobileNativePicker type="month" aria-label="Month" disabled={!editable} value={sheet.period||''} onChange={e=>update('period',e.target.value)}/></label>
           <label>Week number<input type="text" inputMode="numeric" disabled={!editable} value={sheet.weekNo||''} onChange={e=>update('weekNo',e.target.value)} placeholder="Week no."/></label>
           <label className="mobileMetaFull">Employment status<input type="text" disabled={!editable} value={sheet.employmentStatus||''} onChange={e=>update('employmentStatus',e.target.value)} placeholder="Employment status"/></label>
         </div>
@@ -425,7 +448,7 @@ function Timesheet({sheet,setSheet,editable,admin}){
               <span className="mobileShiftNumber">{index+1}</span><span className="mobileShiftSummary"><strong>Shift {index+1}</strong><small>{summary||'New shift — no details entered'}</small></span><span className={`mobileShiftState ${!filled?'isBlank':complete?'isComplete':'isIncomplete'}`}>{!filled?'New':complete?'Ready':'Incomplete'}</span>{expanded?<ChevronUp size={18}/>:<ChevronDown size={18}/>}</button>
             {expanded&&<div id={`mobile-shift-body-${row.id}`} className="mobileShiftBody">
               <div className="mobileShiftFields">{mobileShiftFields.map(field=>mobileField(field,row,index))}</div>
-              {(admin||hasOfficeData)&&<details className="mobileOfficeDetails"><summary>Office use {hasOfficeData?'· calculations recorded':''}</summary><div className="mobileOfficeGrid">{mobileOfficeFields.map(({key,label})=><label key={key}>{label}<input value={row[key]||''} disabled={!admin} onChange={e=>updateRow(index,key,e.target.value)} inputMode="decimal"/></label>)}</div></details>}
+              {(admin||hasOfficeData)&&<details className="mobileOfficeDetails"><summary><span className="mobileOfficeBadge">OFFICE USE</span><span className="mobileOfficeSummary">{hasOfficeData?'Calculations recorded':'Hours, duty and risk scores'}</span><ChevronDown className="mobileOfficeChevron" size={17} aria-hidden="true" /></summary><div className="mobileOfficeGrid">{mobileOfficeFields.map(({key,label})=><label key={key} className={`mobileOfficeField mobileOffice-${key}`}><span>{label}</span><input value={row[key]||''} disabled={!admin} onChange={e=>updateRow(index,key,e.target.value)} inputMode="decimal"/></label>)}</div></details>}
               {editable&&<div className="mobileRowActions"><button type="button" className="secondary" onClick={()=>duplicateMobileShift(index)}><Copy size={16}/> Duplicate shift</button><button type="button" className="mobileRemove" onClick={()=>removeMobileShift(index)}><Trash2 size={16}/> Remove</button></div>}
             </div>}
           </section>;
