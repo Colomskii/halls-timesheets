@@ -5,3 +5,41 @@
 @media(max-width:900px){.staffAdmin .staffTable .staffHead{display:none}.staffAdmin .staffTable .staffRow{grid-template-columns:1fr 1fr;gap:12px}.staffAdmin .staffTable .staffRow .staffIdentity{grid-column:1/-1}.staffAdmin .staffTable .staffRow .staffActions{grid-column:1/-1}.staffSummary{gap:8px}.staffSummary>div{padding:12px}.staffSummary b{font-size:21px}}
 @media(max-width:550px){.staffSummary{grid-template-columns:repeat(3,minmax(0,1fr))}.staffSummary span{font-size:10px}.credentialGrid{grid-template-columns:1fr}.modalActions{flex-direction:column-reverse}.modalActions button{width:100%}}
 @media print{.staffAdmin,.accountSettings{display:none!important}}
+
+/* v0.3: print fixes (also used if a popup blocker triggers the fallback print). */
+@media print {
+  html, body, #root, .shell, .mainArea, .content {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .shell, .mainArea, .content {
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .printOnly { display: block !important; }
+  .printPage {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 2mm !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+    break-after: page;
+    page-break-after: always;
+  }
+  .printPage:last-child { break-after: auto; page-break-after: auto; }
+  .printPage .sheetHeader, .printPage .sheetInstructions,
+  .printPage .sheetTop, .printPage .timesheetTable,
+  .printPage .sheetFooter { min-width: 0 !important; }
+  .printPage .timesheetTable { width: 100% !important; }
+  .printPage .sheetHeader h2 { white-space: normal !important; }
+  .printPage .sheetFooter { break-inside: avoid-page; page-break-inside: avoid; }
+  .printOnly * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

@@ -17,6 +17,150 @@ const officeKeys = ['working','shiftsClaim','duty','rest','risk','fatigue'];
 const isEditable = sheet => sheet && ['draft','returned'].includes(sheet.status);
 const displayPeriod = p => p ? new Date(`${p}-01T12:00:00`).toLocaleDateString('en-GB',{month:'long',year:'numeric'}) : 'Untitled';
 function sanitize(sheet){ const fields=['employeeId','employeeName','employmentStatus','period','weekNo','status','rows','declarationAccepted','declarationName','declarationDate','managerName','managerDate','managerSignature','reviewNote','officeNote']; return Object.fromEntries(fields.filter(k=>sheet[k]!==undefined).map(k=>[k,sheet[k]])); }
+// Synchronise what the browser currently shows with the rows we will save.
+// Particularly important for segmented native date inputs on Safari.
+function currentFormRows(rows) {
+  return rows.map((row, index) => {
+    const values = { ...row };
+    for (const field of ['date', 'location', 'start', 'finish']) {
+      const input = document.querySelector(
+        `[data-timesheet-row="${index}"][data-timesheet-field="${field}"]`
+      );
+      if (input) values[field] = input.value;
+    }
+    return values;
+  });
+}
+
+function validateShiftRows(rows) {
+  const required = [
+    ['date', 'shift date'],
+    ['location', 'location'],
+    ['start', 'start time'],
+    ['finish', 'finish time'],
+  ];
+  const present = (row, field) => String(row[field] ?? '').trim().length > 0;
+  if (rows.some(row => required.every(([field]) => present(row, field)))) return;
+
+  const candidates = rows.map((row, index) => ({
+    row,
+    index,
+    filledCount: required.filter(([field]) => present(row, field)).length,
+  }));
+  const closest = candidates.sort((a, b) => b.filledCount - a.filledCount)[0];
+  if (!closest || closest.filledCount === 0) {
+    throw new Error('Please enter at least one shift with a date, location and start/finish time.');
+  }
+  const missing = required.filter(([field]) => !present(closest.row, field)).map(([, label]) => label);
+  const dateHint = missing.includes('shift date')
+    ? ' If the date looks filled in, choose it again from the date picker and click outside the field.'
+    : '';
+  throw new Error(`Row ${closest.index + 1}: missing ${missing.join(', ')}.${dateHint}`);
+}
+
+// Open an isolated print view instead of printing the entire app shell.
+// This also prevents Netlify-injected page furniture from being included in printouts.
+function openTimesheetPrintView() {
+  const source = document.querySelector('.printOnly');
+  if (!source) {
+    window.print();
+    return;
+  }
+
+  // Open synchronously from the user's click so Safari and popup blockers allow it.
+  const preview = window.open('', '_blank', 'width=1180,height=850');
+  if (!preview) {
+    // Popups may be disabled: retain the browser's original print behaviour.
+    window.print();
+    return;
+  }
+
+  try {
+    const printDoc = preview.document;
+    printDoc.open();
+    printDoc.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Hall's Timesheets - Print</title></head><body class="timesheet-print-window"><div class="printToolbar"><span>Hall's Timesheets · Print preview</span><div><button id="timesheetPrintAction" type="button">Print / Save as PDF</button><button id="timesheetCloseAction" type="button">Close</button></div></div><main id="printMount"></main></body></html>`);
+    printDoc.close();
+
+    // Reuse the site's compiled Vite stylesheet and the already-rendered,
+    // read-only print pages. No credentials or timesheets are sent elsewhere.
+    const copiedStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'));
+    const links = [];
+    for (const stylesheet of copiedStyles) {
+      const clone = stylesheet.cloneNode(true);
+      if (clone.tagName === 'LINK') links.push(clone);
+      printDoc.head.appendChild(clone);
+    }
+    printDoc.getElementById('printMount').appendChild(source.cloneNode(true));
+
+    const css = printDoc.createElement('style');
+    css.textContent = `
+      html, body { margin:0; min-height:0; padding:0; }
+      body.timesheet-print-window { background:#eef1f3; }
+      .timesheet-print-window .printOnly { display:block !important; }
+      .printToolbar { position:sticky; top:0; z-index:20; display:flex;
+        justify-content:space-between; align-items:center; gap:16px;
+        background:#192630; color:white; font:600 14px Arial,sans-serif;
+        padding:12px 20px; }
+      .printToolbar > div { display:flex; gap:10px; }
+      .printToolbar button { background:white; color:#192630; border:0; border-radius:5px;
+        padding:10px 14px; font:600 13px Arial,sans-serif; cursor:pointer; }
+      .timesheet-print-window .printPage { width:min(1120px,calc(100% - 32px));
+        min-height:0; margin:18px auto; padding:16px; }
+      @page { size:A4 landscape; margin:6mm; }
+      @media print {
+        html, body, #printMount { background:white !important; width:100% !important;
+          height:auto !important; min-height:0 !important; padding:0 !important; margin:0 !important; }
+        .printToolbar { display:none !important; }
+        .timesheet-print-window .printOnly { display:block !important; }
+        .timesheet-print-window .printPage { box-sizing:border-box; display:block !important;
+          width:100% !important; height:auto !important; min-height:0 !important;
+          margin:0 !important; padding:2mm !important; border:0 !important;
+          box-shadow:none !important; overflow:visible !important;
+          break-inside:avoid-page; page-break-inside:avoid;
+          break-after:page; page-break-after:always; }
+        .timesheet-print-window .printPage:last-child { break-after:auto; page-break-after:auto; }
+        .timesheet-print-window .sheetHeader,
+        .timesheet-print-window .sheetInstructions,
+        .timesheet-print-window .sheetTop,
+        .timesheet-print-window .timesheetTable,
+        .timesheet-print-window .sheetFooter { min-width:0 !important; }
+        .timesheet-print-window .sheetFooter { break-inside:avoid-page; page-break-inside:avoid; }
+        .timesheet-print-window .timesheetTable { width:100% !important; }
+        .timesheet-print-window .sheetHeader h2 { white-space:normal !important; }
+        .timesheet-print-window * { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+      }
+    `;
+    printDoc.head.appendChild(css);
+
+    printDoc.getElementById('timesheetPrintAction').addEventListener('click', () => {
+      preview.focus();
+      preview.print();
+    });
+    printDoc.getElementById('timesheetCloseAction').addEventListener('click', () => preview.close());
+
+    // Wait for the copied Vite CSS and fonts before showing the native print dialog.
+    // If a browser blocks automatic printing, the visible Print button remains available.
+    const stylesLoaded = links.map(link => new Promise(resolve => {
+      if (link.sheet) return resolve();
+      link.addEventListener('load', resolve, { once:true });
+      link.addEventListener('error', resolve, { once:true });
+    }));
+    Promise.all(stylesLoaded)
+      .then(() => printDoc.fonts?.ready || Promise.resolve())
+      .then(() => {
+        if (!preview.closed) {
+          preview.focus();
+          preview.print();
+        }
+      })
+      .catch(() => {});
+  } catch (error) {
+    console.error('Could not prepare the timesheet print view:', error);
+    preview.close();
+    window.print();
+  }
+}
+
 function LogButton({children,...props}){return <button className="btn" {...props}>{children}</button>}
 function App(){
  const [session,setSession]=useState(undefined),[profile,setProfile]=useState(null),[authError,setAuthError]=useState(''),[loginName,setLoginName]=useState(''),[password,setPassword]=useState('');
@@ -27,7 +171,7 @@ function App(){
  async function login(e){e.preventDefault();setAuthError('');try{const email=loginName.includes('@')?loginName.trim():`${loginName.trim().toLowerCase()}@halls-timesheets.local`;await signInWithEmailAndPassword(auth,email,password);}catch(e){setAuthError('Login failed. Check your username and password.')}}
  function openEditor(sheet){setSelected(sheet?.id||null);setEditor(sheet?{...sheet,rows:safeRows(sheet.rows).map(r=>({...r,id:r.id||crypto.randomUUID()}))}:blankSheet(profile));setView('editor');setError('')}
  async function audit(action,id){try{await addDoc(collection(db,'auditLogs'),{action,timesheetId:id,actorUid:session.uid,timestamp:serverTimestamp()});}catch(e){console.warn('Audit logging failed:',e.message)}}
- async function saveSheet(submit=false){if(!editor)return;setBusy(true);setError('');try{const data=sanitize({...editor,status:submit?'submitted':editor.status==='returned'?'draft':editor.status});if(submit){if(!data.rows.some(r=>r.date&&r.location&&r.start&&r.finish))throw new Error('Please enter at least one shift with a date, location and start/finish time.');if(!data.declarationAccepted||!data.declarationName)throw new Error('Please complete the declaration before submitting.');data.submittedAt=serverTimestamp();}const id=selected;if(id){const updates={...data,updatedAt:serverTimestamp()};delete updates.employeeId;delete updates.employeeName;await updateDoc(doc(db,'timesheets',id),updates);await audit(submit?'submit':'save',id);}else{const ref=await addDoc(collection(db,'timesheets'),{...data,status:'draft',createdAt:serverTimestamp(),updatedAt:serverTimestamp()});if(submit){await updateDoc(ref,{status:'submitted',submittedAt:serverTimestamp()});}await audit(submit?'submit':'create',ref.id);}setEditor(null);setView('history');}catch(e){setError(e.message)}finally{setBusy(false)}}
+ async function saveSheet(submit=false){if(!editor)return;setBusy(true);setError('');try{const data=sanitize({...editor,rows:currentFormRows(editor.rows),status:submit?'submitted':editor.status==='returned'?'draft':editor.status});if(submit){validateShiftRows(data.rows);if(!data.declarationAccepted||!data.declarationName)throw new Error('Please complete the declaration before submitting.');data.submittedAt=serverTimestamp();}const id=selected;if(id){const updates={...data,updatedAt:serverTimestamp()};delete updates.employeeId;delete updates.employeeName;await updateDoc(doc(db,'timesheets',id),updates);await audit(submit?'submit':'save',id);}else{const ref=await addDoc(collection(db,'timesheets'),{...data,status:'draft',createdAt:serverTimestamp(),updatedAt:serverTimestamp()});if(submit){await updateDoc(ref,{status:'submitted',submittedAt:serverTimestamp()});}await audit(submit?'submit':'create',ref.id);}setEditor(null);setView('history');}catch(e){setError(e.message)}finally{setBusy(false)}}
  async function review(status){setBusy(true);setError('');try{if(status==='returned'&&!editor.reviewNote?.trim())throw new Error('Enter a reason for returning this timesheet.');await updateDoc(doc(db,'timesheets',selected),{status,reviewNote:editor.reviewNote||'',managerName:editor.managerName||'',managerDate:editor.managerDate||'',managerSignature:editor.managerSignature||'',officeNote:editor.officeNote||'',rows:editor.rows,reviewedBy:session.uid,reviewedAt:serverTimestamp(),updatedAt:serverTimestamp()});await audit(status,selected);setView('history');setEditor(null);}catch(e){setError(e.message)}finally{setBusy(false)}}
  const isAdmin=profile?.role==='admin';const visibleSheets=sheets.filter(s=>filterEmployee==='all'||s.employeeId===filterEmployee);
  if(!isConfigured)return <main className="setup"><h1>Hall's Timesheets</h1><p>Firebase configuration is missing. Copy <code>.env.example</code> to <code>.env</code>, enter your Firebase web-app configuration and restart Vite.</p></main>;
@@ -39,13 +183,13 @@ function App(){
  {view==='history'&&<><div className="pageHead"><div><h1>{isAdmin?'Submitted timesheets':'My timesheets'}</h1><p>Access saved, submitted and historical records.</p></div><LogButton onClick={()=>openEditor(null)}><Plus size={16}/> New timesheet</LogButton></div>{isAdmin&&<div className="filterLine"><label>Employee <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)}><option value="all">All employees</option>{staff.map(s=><option key={s.uid} value={s.uid}>{s.displayName}</option>)}</select></label></div>}<div className="historyList">{visibleSheets.length===0?<div className="empty">No timesheets found. Select <b>New timesheet</b> to get started.</div>:visibleSheets.map(s=><div className="historyItem" key={s.id}><div className="docSymbol"><FileText size={22}/></div><div className="historyTitle"><strong>{displayPeriod(s.period)}</strong><small>{s.employeeName} · {s.rows?.filter(r=>r.date).length||0} shift entries · {Math.max(1,Math.ceil((s.rows?.filter(r=>r.date).length||0)/9))} printable page(s)</small></div><span className={'status '+s.status}>{s.status}</span><button className="secondary" onClick={()=>openEditor(s)}>View</button></div>)}</div></>}
  {view==='staff'&&isAdmin&&<StaffRegister staff={staff} currentUserUid={session.uid}/>}
  {view==='account'&&<AccountSettings profile={profile}/>}
- {view==='editor'&&editor&&<><div className="pageHead editorToolbar"><div><button className="back" onClick={()=>{setView('history');setEditor(null)}}><ArrowLeft size={16}/> Back to timesheets</button><h1>{selected?'Timesheet':'New timesheet'}</h1><p>{editor.employeeName} · {displayPeriod(editor.period)}</p></div><div className="toolbarActions"><span className={'status '+editor.status}>{editor.status}</span><button className="secondary" onClick={()=>window.print()}><Printer size={16}/> Print</button>{isEditable(editor)&&!isAdmin&&<><button className="secondary" onClick={()=>saveSheet(false)} disabled={busy}><Save size={16}/> Save draft</button><button className="btn" disabled={busy} onClick={()=>saveSheet(true)}><Send size={16}/> Submit</button></>}{!selected&&isAdmin&&<button className="btn" disabled={busy} onClick={()=>saveSheet(false)}><Save size={16}/> Save draft</button>}</div></div><Timesheet sheet={editor} setSheet={setEditor} editable={(!isAdmin&&isEditable(editor))||(!selected&&isAdmin)} admin={isAdmin} />{isAdmin&&selected&&<div className="reviewPanel"><h2>Manager review</h2><label>Review note<textarea value={editor.reviewNote||''} onChange={e=>setEditor({...editor,reviewNote:e.target.value})} placeholder="Required if returning for correction"/></label><div className="reviewActions"><button disabled={busy} onClick={()=>review('returned')} className="secondary"><RotateCcw size={16}/> Return for correction</button><button disabled={busy} onClick={()=>review('approved')} className="btn"><Check size={16}/> Approve timesheet</button><button disabled={busy} onClick={()=>review('submitted')} className="secondary">Save office fields</button></div></div>}</>}
+ {view==='editor'&&editor&&<><div className="pageHead editorToolbar"><div><button className="back" onClick={()=>{setView('history');setEditor(null)}}><ArrowLeft size={16}/> Back to timesheets</button><h1>{selected?'Timesheet':'New timesheet'}</h1><p>{editor.employeeName} · {displayPeriod(editor.period)}</p></div><div className="toolbarActions"><span className={'status '+editor.status}>{editor.status}</span><button type="button" className="secondary" onClick={openTimesheetPrintView}><Printer size={16}/> Print</button>{isEditable(editor)&&!isAdmin&&<><button className="secondary" onClick={()=>saveSheet(false)} disabled={busy}><Save size={16}/> Save draft</button><button className="btn" disabled={busy} onClick={()=>saveSheet(true)}><Send size={16}/> Submit</button></>}{!selected&&isAdmin&&<button className="btn" disabled={busy} onClick={()=>saveSheet(false)}><Save size={16}/> Save draft</button>}</div></div><Timesheet sheet={editor} setSheet={setEditor} editable={(!isAdmin&&isEditable(editor))||(!selected&&isAdmin)} admin={isAdmin} />{isAdmin&&selected&&<div className="reviewPanel"><h2>Manager review</h2><label>Review note<textarea value={editor.reviewNote||''} onChange={e=>setEditor({...editor,reviewNote:e.target.value})} placeholder="Required if returning for correction"/></label><div className="reviewActions"><button disabled={busy} onClick={()=>review('returned')} className="secondary"><RotateCcw size={16}/> Return for correction</button><button disabled={busy} onClick={()=>review('approved')} className="btn"><Check size={16}/> Approve timesheet</button><button disabled={busy} onClick={()=>review('submitted')} className="secondary">Save office fields</button></div></div>}</>}
  </main></div></div>;
 }
 function Timesheet({sheet,setSheet,editable,admin}){
  const rows=safeRows(sheet.rows);const update=(key,value)=>setSheet(s=>({...s,[key]:value}));const updateRow=(i,key,value)=>setSheet(s=>({...s,rows:s.rows.map((r,j)=>i===j?{...r,[key]:value}:r)}));const printable=rows.filter(r=>Object.entries(r).some(([k,v])=>k!=='id'&&String(v||'').trim()));const pages=Array.from({length:Math.max(1,Math.ceil(printable.length/9))},(_,i)=>printable.slice(i*9,i*9+9));
  const dateType='date';const selectKeys=['onCall','breaks'];
- function gridTable(displayRows,print=false){return <table className="timesheetTable"><colgroup>{[8,6,14,7,7,6,7,6,6,6,7,7,6,7].map((w,i)=><col key={i} style={{width:`${w}%`}}/>)}</colgroup><thead><tr>{columns.map(([key,label])=><th key={key} className={key==='risk'?'riskHead':key==='fatigue'?'fatigueHead':''}>{label}</th>)}</tr></thead><tbody>{displayRows.map((r,i)=><tr key={r.id||i}>{columns.map(([key])=><td key={key} className={key==='working'||key==='shiftsClaim'?'yellowCell':''}>{print?<span>{r[key]||'\u00a0'}</span>:selectKeys.includes(key)?<select aria-label={key} value={r[key]||''} disabled={!editable} onChange={e=>updateRow(i,key,e.target.value)}><option value=""></option><option>Yes</option><option>No</option></select>:<input aria-label={key} disabled={!editable&&!admin} className="tableInput" type={key==='date'?dateType:'text'} placeholder={['start','finish'].includes(key)?'HH:MM':''} value={r[key]||''} onChange={e=>updateRow(i,key,e.target.value)}/>}</td>)}</tr>)}</tbody></table>}
+ function gridTable(displayRows,print=false){return <table className="timesheetTable"><colgroup>{[8,6,14,7,7,6,7,6,6,6,7,7,6,7].map((w,i)=><col key={i} style={{width:`${w}%`}}/>)}</colgroup><thead><tr>{columns.map(([key,label])=><th key={key} className={key==='risk'?'riskHead':key==='fatigue'?'fatigueHead':''}>{label}</th>)}</tr></thead><tbody>{displayRows.map((r,i)=><tr key={r.id||i}>{columns.map(([key])=><td key={key} className={key==='working'||key==='shiftsClaim'?'yellowCell':''}>{print?<span>{r[key]||'\u00a0'}</span>:selectKeys.includes(key)?<select aria-label={key} value={r[key]||''} disabled={!editable} onChange={e=>updateRow(i,key,e.target.value)}><option value=""></option><option>Yes</option><option>No</option></select>:<input aria-label={key} data-timesheet-row={i} data-timesheet-field={key} disabled={!editable&&!admin} className="tableInput" type={key==='date'?dateType:'text'} placeholder={['start','finish'].includes(key)?'HH:MM':''} value={r[key]||''} onChange={e=>updateRow(i,key,e.target.value)} onBlur={key==='date'?e=>updateRow(i,key,e.currentTarget.value):undefined}/>}</td>)}</tr>)}</tbody></table>}
  function front(pageNo,print=false){return <><div className="sheetHeader"><div className="paperMeta"><strong>Document: HB.FRM.82</strong><span>Date Issue: 11/2022</span><span>Rev: 10</span></div><h2>TIMESHEET - (FATIGUE - RISK MANAGEMENT NR/L2/OHS/003)</h2></div><div className="sheetInstructions"><b>The working hours is calculated using HSE-Fatigue-and-Risk-Index-FRI-Calculator (Weekly Cycle)</b><span>Fatigue Index: Should be no more than 35 for day shifts; should be no more than 45 for night shifts.</span><span>Risk Index: Scores should not be above 1.6.</span></div><div className="sheetTop"><div className="weekBlock"><label>Week No:</label>{print?<span>{sheet.weekNo||'\u00a0'}</span>:<input value={sheet.weekNo||''} disabled={!editable} onChange={e=>update('weekNo',e.target.value)}/>}</div><div className="paperTopEntries"><label>Employees Name: <strong>{sheet.employeeName}</strong></label><label>Employment Status: {print?<strong>{sheet.employmentStatus}</strong>:<input value={sheet.employmentStatus||''} disabled={!editable} onChange={e=>update('employmentStatus',e.target.value)}/>}</label><label>MONTH {print?<strong>{displayPeriod(sheet.period)}</strong>:<input type="month" value={sheet.period||''} disabled={!editable} onChange={e=>update('period',e.target.value)}/>}</label></div><div className="officeLabel">OFFICE USE</div></div>{print?gridTable([...pages[pageNo],...Array.from({length:Math.max(0,9-pages[pageNo].length)},emptyRow)],true):gridTable(rows)}</>}
  const legal=<div className="sheetFooter"><div className="requirements"><div>1. No-one shall work more than 13 consecutive turns of duty in any 14-day period.</div><div>2. No more than 72 hours to be worked per calendar week (00:00hrs Sunday to 23:59 hrs Saturday).</div><div>3. No more than 12 hours to be worked per turn of duty/shift.</div><div>4. A minimum rest period of 12 hours between shifts including any travelling time.</div><div>5. Ensure to access the Sentinel App through using Swipe In/Out on every shift with the COSS / person in charge (maintaining safe access to the NWR Infrastructure).</div><strong>DECLARATION</strong><div>I hereby waive the restrictions on the 48 hour average weekly working time set out in Working Time Regulations 1998 (normal average of over 17 weeks).</div><div className="signature"><div>Signature: <b>{sheet.declarationName||''}</b></div><div className="noticeOrange">Note: Not driving; sharing transportation</div></div><div className="dateSign">Date Sign: {sheet.declarationDate||''}</div></div><div className="managerBox"><strong>MANAGER'S APPROVAL:</strong><div>Name: {sheet.managerName||''}</div><div>Signature: {sheet.managerSignature||''}</div><div>Date Signed: {sheet.managerDate||''}</div></div></div>;
  return <><div className="paper screenPaper">{front(0)}<div className="rowControls">{editable&&<><button onClick={()=>setSheet(s=>({...s,rows:[...s.rows,emptyRow()]}))}><Plus size={16}/> Add new row</button><button className="secondary" disabled={rows.length<=1} onClick={()=>setSheet(s=>({...s,rows:s.rows.slice(0,-1)}))}><Trash2 size={15}/> Remove last row</button></>}<span>{rows.length} rows · {Math.max(1,Math.ceil(printable.length/9))} printable page(s)</span></div><div className="legalScreen">{legal}</div><div className="declarationBox"><h3>Employee declaration</h3><p>The original form includes a declaration waiving the 48-hour average weekly working-time restriction. Signing in alone does not constitute acceptance.</p><label className="checkline"><input type="checkbox" disabled={!editable} checked={Boolean(sheet.declarationAccepted)} onChange={e=>update('declarationAccepted',e.target.checked)}/> I have read and agree to the declaration printed above.</label><div className="inlineFields"><label>Type full name<input disabled={!editable} value={sheet.declarationName||''} onChange={e=>update('declarationName',e.target.value)}/></label><label>Date<input type="date" disabled={!editable} value={sheet.declarationDate||''} onChange={e=>update('declarationDate',e.target.value)}/></label></div><small>This typed acknowledgement is recorded with the submission; confirm organisational requirements for valid signatures and opt-outs.</small></div>{admin&&<div className="officeInputs"><h3>Office use and manager approval</h3><div className="inlineFields"><label>Manager name<input value={sheet.managerName||''} onChange={e=>update('managerName',e.target.value)}/></label><label>Manager signature / reference<input value={sheet.managerSignature||''} onChange={e=>update('managerSignature',e.target.value)}/></label><label>Date approved<input type="date" value={sheet.managerDate||''} onChange={e=>update('managerDate',e.target.value)}/></label></div><label>Office note<textarea value={sheet.officeNote||''} onChange={e=>update('officeNote',e.target.value)}/></label></div>}</div><div className="printOnly">{pages.map((p,i)=><div className="paper printPage" key={i}>{front(i,true)}{i===pages.length-1?legal:<div className="continuation">Continuation sheet {i+1} of {pages.length} · {sheet.employeeName}</div>}</div>)}</div></>;
