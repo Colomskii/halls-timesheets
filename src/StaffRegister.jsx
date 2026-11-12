@@ -122,7 +122,7 @@ export default function StaffRegister({staff, currentUserUid}) {
     </div>
     {editing&&<div className="modal" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}>
       <form className="modalPanel employeeModal" onSubmit={save} aria-label={editing==='create'?'Add employee':'Edit employee'}>
-        <div className="modalTitle"><div><h2>{editing==='create'?'Add employee':'Edit employee'}</h2><p>{editing==='create'?'Their login will be created automatically. No Firebase UID needed.':'Changes will also update the Firebase login.'}</p></div><button type="button" className="iconButton" aria-label="Close" onClick={close}><X size={20}/></button></div>
+        <div className="modalTitle"><div><h2>{editing==='create'?'Add employee':'Edit employee'}</h2><p>{editing==='create'?'Their login will be created automatically.':'Changes will also update the Firebase login.'}</p></div><button type="button" className="iconButton" aria-label="Close" onClick={close}><X size={20}/></button></div>
         {error&&<p className="formError" role="alert">{error}</p>}
         <div className="employeeFields">
           <label>Full name<input autoFocus required maxLength={100} placeholder="e.g. Mark Smith" value={form.displayName} onChange={e=>setField('displayName',e.target.value)}/></label>
@@ -130,7 +130,7 @@ export default function StaffRegister({staff, currentUserUid}) {
           <label>Employment status<input maxLength={100} placeholder="e.g. Employed / Self-employed" value={form.employmentStatus} onChange={e=>setField('employmentStatus',e.target.value)}/></label>
           <label>Account role<select value={form.role} onChange={e=>setField('role',e.target.value)}><option value="staff">Employee</option><option value="admin">Administrator</option></select></label>
           <label className="checkline"><input type="checkbox" checked={form.active} disabled={editing===currentUserUid} onChange={e=>setField('active',e.target.checked)}/> Active account</label>
-          {editing==='create'&&<div className="passwordSection"><label>Temporary password<PasswordField value={tempPassword} onChange={setTempPassword}/></label><button type="button" className="secondary" onClick={()=>setTempPassword(generatePassword())}><RefreshCw size={14}/> Generate another</button><small>Give the employee their username and password privately. They can change their password after signing in.</small></div>}
+          {editing==='create'&&<div className="passwordSection"><label>Temporary password<PasswordField value={tempPassword} onChange={setTempPassword}/></label><button type="button" className="secondary" onClick={()=>setTempPassword(generatePassword())}><RefreshCw size={14}/> Generate another</button><br></br><small>Give the employee their username and password privately.<br></br> They can change their password after signing in.</small></div>}
         </div>
         <div className="modalActions"><button type="button" className="secondary" onClick={close}>Cancel</button><button className="btn" type="submit" disabled={busy}>{busy?'Saving…':editing==='create'?'Create employee account':'Save changes'}</button></div>
       </form>
