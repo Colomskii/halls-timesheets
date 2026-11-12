@@ -588,3 +588,74 @@
   .paper.printPage .sheetFooter { break-inside:avoid-page!important; page-break-inside:avoid!important; }
   .printOnly * { print-color-adjust:exact!important; -webkit-print-color-adjust:exact!important; }
 }
+
+
+/* v0.10 — Automatic session expiry: Longcroft timings, Hall's Timesheets styling. */
+.sessionExpiryBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: rgba(12, 27, 37, .76);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+}
+.sessionExpiryDialog {
+  width: min(100%, 440px);
+  max-height: min(94dvh, 680px);
+  overflow-y: auto;
+  padding: 25px;
+  border: 1px solid #d2dce1;
+  border-top: 5px solid #243b46;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #253945;
+  box-shadow: 0 24px 70px rgba(0,0,0,.26);
+}
+.sessionExpiryHeading { display: flex; align-items: flex-start; gap: 13px; }
+.sessionExpiryIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  height: 44px;
+  background: #e9eff2;
+  color: #243b46;
+  border-radius: 9px;
+}
+.sessionExpiryHeading h2 { margin: 0 0 5px; font-size: 21px; letter-spacing: -.3px; }
+.sessionExpiryHeading p { margin: 0; font-size: 13px; color: #71818c; line-height: 1.5; }
+.sessionExpiryDescription { margin: 22px 0 10px; font-size: 14px; line-height: 1.65; }
+.sessionExpiryCountdown {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  margin: 13px 0;
+  padding: 11px 15px;
+  background: #f0f4f6;
+  border: 1px solid #dbe4e9;
+  border-radius: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.sessionExpiryCountdown strong { font-size: 39px; line-height: 1.2; color: #243b46; }
+.sessionExpiryCountdown span { color: #607681; font-size: 13px; font-weight: 650; }
+.sessionExpiryHint { margin: 11px 0 22px; font-size: 12px; color: #6f7b82; line-height: 1.5; }
+.sessionExpiryError { font-size: 13px; color: #a02325; background: #fff0ee; padding: 10px; border-radius: 5px; }
+.sessionExpiryActions { display: flex; gap: 9px; justify-content: flex-end; }
+.sessionExpiryActions button { min-height: 43px; white-space: nowrap; }
+.sessionExpiryContinue { flex: 1.15; }
+.sessionExpiryLogout { flex: 1; }
+.sessionExpiryDialog button:focus-visible { outline: 3px solid #5991ab; outline-offset: 3px; }
+@media (max-width: 440px) {
+  .sessionExpiryDialog { padding: 19px; }
+  .sessionExpiryHeading h2 { font-size: 19px; }
+  .sessionExpiryActions { flex-direction: column; }
+  .sessionExpiryActions button { width: 100%; }
+}
+@media print {
+  .sessionExpiryBackdrop { display: none !important; }
+}

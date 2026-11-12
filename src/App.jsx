@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { auth, db, isConfigured } from './firebase';
@@ -275,6 +275,156 @@ async function downloadTimesheetPdf(sheet) {
   }
 }
 
+// Matches the latest Longcroft inactivity policy:
+// Production: sign out after five minutes idle; warn for the final 15 seconds.
+// Vite development: one-minute idle timeout with the same 15-second warning.
+// A warning must be acknowledged explicitly; mouse/touch/keyboard activity
+// alone cannot dismiss it. Background tabs are checked when reopened.
+const SESSION_IDLE_LIMIT_MS = import.meta.env.DEV ? 60_000 : 5 * 60_000;
+const SESSION_WARNING_MS = 15_000;
+
+function SessionInactivityGuard() {
+  const [warningOpen, setWarningOpen] = useState(false);
+  const [countdown, setCountdown] = useState(SESSION_WARNING_MS / 1000);
+  const [logoutError, setLogoutError] = useState('');
+  const continueSessionRef = useRef(null);
+  const logoutNowRef = useRef(null);
+
+  useEffect(() => {
+    let lastActivityAt = Date.now();
+    let warningActive = false;
+    let loggingOut = false;
+    let logoutFailed = false;
+    let mounted = true;
+
+    const logout = async () => {
+      if (loggingOut || !mounted) return;
+      loggingOut = true;
+      try {
+        await signOut(auth);
+      } catch (error) {
+        // Keep the warning open if Firebase cannot complete sign-out.
+        console.error('Session sign-out failed:', error);
+        loggingOut = false;
+        logoutFailed = true;
+        setLogoutError('Could not sign out. Select Logout Now to try again.');
+        setWarningOpen(true);
+        warningActive = true;
+      }
+    };
+
+    const checkElapsedTime = () => {
+      if (!mounted || loggingOut || logoutFailed) return;
+      const elapsed = Date.now() - lastActivityAt;
+      if (elapsed >= SESSION_IDLE_LIMIT_MS) {
+        void logout();
+        return;
+      }
+      if (elapsed >= SESSION_IDLE_LIMIT_MS - SESSION_WARNING_MS) {
+        warningActive = true;
+        setWarningOpen(true);
+        setCountdown(Math.max(1, Math.ceil((SESSION_IDLE_LIMIT_MS - elapsed) / 1000)));
+      }
+    };
+
+    const recordActivity = () => {
+      if (!mounted || loggingOut || logoutFailed || document.hidden) return;
+      // If a tab was suspended, a mouse movement must not extend an
+      // already-expired session before the focus handler can check it.
+      if (Date.now() - lastActivityAt >= SESSION_IDLE_LIMIT_MS) {
+        void logout();
+        return;
+      }
+      if (warningActive) return;
+      // An event arriving just before the next interval tick cannot skip the warning.
+      if (Date.now() - lastActivityAt >= SESSION_IDLE_LIMIT_MS - SESSION_WARNING_MS) {
+        checkElapsedTime();
+        return;
+      }
+      lastActivityAt = Date.now();
+    };
+
+    const resumeCheck = () => checkElapsedTime();
+    const visibilityCheck = () => {
+      if (!document.hidden) checkElapsedTime();
+    };
+
+    continueSessionRef.current = () => {
+      if (logoutFailed || loggingOut || Date.now() - lastActivityAt >= SESSION_IDLE_LIMIT_MS) {
+        checkElapsedTime();
+        return;
+      }
+      lastActivityAt = Date.now();
+      warningActive = false;
+      setLogoutError('');
+      setWarningOpen(false);
+      setCountdown(SESSION_WARNING_MS / 1000);
+    };
+    logoutNowRef.current = () => { logoutFailed = false; void logout(); };
+
+    // Same user-activity events as lcrota (no special treatment by role).
+    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
+    activityEvents.forEach(event => window.addEventListener(event, recordActivity, { passive: true }));
+    document.addEventListener('visibilitychange', visibilityCheck);
+    window.addEventListener('focus', resumeCheck);
+
+    // Derive the countdown from wall-clock time instead of counting interval
+    // ticks; Safari throttles timers when a tab is in the background.
+    const ticker = window.setInterval(checkElapsedTime, 250);
+    return () => {
+      mounted = false;
+      window.clearInterval(ticker);
+      activityEvents.forEach(event => window.removeEventListener(event, recordActivity));
+      document.removeEventListener('visibilitychange', visibilityCheck);
+      window.removeEventListener('focus', resumeCheck);
+      continueSessionRef.current = null;
+      logoutNowRef.current = null;
+    };
+  }, []);
+
+  if (!warningOpen) return null;
+  const minutes = SESSION_IDLE_LIMIT_MS / 60_000;
+  return <div className="sessionExpiryBackdrop">
+    <section className="sessionExpiryDialog" role="alertdialog" aria-modal="true"
+      aria-labelledby="session-expiry-title" aria-describedby="session-expiry-description"
+      onKeyDown={event => {
+        if (event.key !== 'Tab') return;
+        const buttons = [...event.currentTarget.querySelectorAll('button:not(:disabled)')];
+        if (!buttons.length) return;
+        if (event.shiftKey && document.activeElement === buttons[0]) {
+          event.preventDefault();
+          buttons[buttons.length - 1].focus();
+        } else if (!event.shiftKey && document.activeElement === buttons[buttons.length - 1]) {
+          event.preventDefault();
+          buttons[0].focus();
+        }
+      }}>
+      <div className="sessionExpiryHeading">
+        <span className="sessionExpiryIcon" aria-hidden="true"><Clock3 size={23} /></span>
+        <div>
+          <h2 id="session-expiry-title">Session Expiring</h2>
+          <p>Your timesheet session is about to end.</p>
+        </div>
+      </div>
+      <p className="sessionExpiryDescription" id="session-expiry-description">
+        You have been inactive for nearly {minutes} {minutes === 1 ? 'minute' : 'minutes'}.
+        For security, you will be signed out in:
+      </p>
+      <div className="sessionExpiryCountdown" role="timer" aria-live="off">
+        <strong>{countdown}</strong><span>seconds</span>
+      </div>
+      <p className="sessionExpiryHint">Unsaved timesheet changes will be lost if the session expires.</p>
+      {logoutError && <p className="sessionExpiryError" role="alert">{logoutError}</p>}
+      <div className="sessionExpiryActions">
+        <button type="button" className="btn sessionExpiryContinue" autoFocus
+          onClick={() => continueSessionRef.current?.()}>Continue Session</button>
+        <button type="button" className="secondary sessionExpiryLogout"
+          onClick={() => logoutNowRef.current?.()}><LogOut size={16} /> Logout Now</button>
+      </div>
+    </section>
+  </div>;
+}
+
 function LogButton({children,...props}){return <button className="btn" {...props}>{children}</button>}
 function App(){
  const [session,setSession]=useState(undefined),[profile,setProfile]=useState(null),[authError,setAuthError]=useState(''),[loginName,setLoginName]=useState(''),[password,setPassword]=useState('');
@@ -404,7 +554,7 @@ function App(){
  {view==='staff'&&isAdmin&&<StaffRegister staff={staff} currentUserUid={session.uid}/>}
  {view==='account'&&<AccountSettings profile={profile}/>}
  {view==='editor'&&editor&&<><div className="pageHead editorToolbar"><div><button className="back" onClick={()=>{setView('history');setEditor(null)}}><ArrowLeft size={16}/> Back to timesheets</button><h1>{selected?'Timesheet':'New timesheet'}</h1><p>{editor.employeeName} · {displayPeriod(editor.period)}</p></div><div className="toolbarActions"><span className={'status '+editor.status}>{editor.status}</span><button type="button" className="secondary" onClick={openTimesheetPrintView}><Printer size={16}/> Print</button><button type="button" className="secondary" disabled={pdfBusy} onClick={async()=>{setError('');setPdfBusy(true);try{await downloadTimesheetPdf(editor);}catch(e){console.error('PDF export failed:',e);setError(e?.message||'Could not save the timesheet as a PDF.');}finally{setPdfBusy(false);}}}><Download size={16}/> {pdfBusy?'Creating PDF…':'Save PDF'}</button>{canEditOwn&&<><button className="secondary desktopEntrySave" onClick={()=>saveSheet(false)} disabled={busy}><Save size={16}/> Save draft</button><button className="btn desktopEntrySubmit" disabled={busy} onClick={()=>saveSheet(true)}><Send size={16}/> Submit</button></>}{isAdmin&&selected&&<button type="button" className="dangerAction" disabled={busy} onClick={()=>deleteTimesheet(editor)}><Trash2 size={16}/> Delete timesheet</button>}</div></div>{editor.employeeId===session.uid&&editor.reviewNote?.trim()&&['returned','draft'].includes(editor.status)&&<section className="returnNotePanel" role="note" aria-label="Reason the timesheet was returned"><div className="returnNoteHeading"><RotateCcw size={18} aria-hidden="true"/><strong>{editor.status==='returned'?'Timesheet returned for correction':'Previous return note'}</strong></div><p>{editor.reviewNote}</p><small>{editor.status==='returned'?'Please review the feedback, correct the timesheet and submit it again.':'This note is retained from the previous return so you can refer to it while editing.'}</small></section>}<Timesheet key={selected||'new'} sheet={editor} setSheet={setEditor} editable={Boolean(canEditOwn)} admin={canReview} />{canEditOwn&&<div className="mobileBottomActions"><button type="button" className="secondary" disabled={busy} onClick={()=>saveSheet(false)}><Save size={17}/> Save draft</button><button type="button" className="btn" disabled={busy} onClick={()=>saveSheet(true)}><Send size={17}/> Submit timesheet</button></div>}{canReview&&<div className="reviewPanel"><h2>Manager review</h2><label>Review note<textarea value={editor.reviewNote||''} onChange={e=>setEditor({...editor,reviewNote:e.target.value})} placeholder="Required if returning for correction"/></label><div className="reviewActions"><button disabled={busy} onClick={()=>review('returned')} className="secondary"><RotateCcw size={16}/> Return for correction</button><button disabled={busy} onClick={()=>review('approved')} className="btn"><Check size={16}/> Approve timesheet</button><button disabled={busy} onClick={()=>review('submitted')} className="secondary">Save office fields</button></div></div>}</>}
- </main></div></div>;
+ </main></div><SessionInactivityGuard key={session.uid} /></div>;
 }
 // The mobile editor intentionally shares the exact same row schema as the
 // traditional HB.FRM.82 table. Printed/PDF pages are still rendered from that
