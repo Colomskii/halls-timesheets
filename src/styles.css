@@ -140,3 +140,158 @@
 }
 .pdfExportSandbox .paperTopEntries label,
 .pdfExportSandbox .managerBox { font-size: 9px !important; }
+
+/* ========================================================================
+   v0.6 - Mobile shift-card editor
+   Desktop table, A4 printing and PDF markup remain the original HB.FRM.82.
+   None of the mobile presentation rules apply to .pdfExportSandbox.
+   ======================================================================== */
+.mobileShiftEditor,
+.mobileOriginalPreview,
+.mobileRequirements,
+.mobileBottomActions { display: none; }
+
+@media (max-width: 900px) {
+  /* Keep existing desktop paper intact but provide a proper phone-first editor. */
+  .screenPaper { display: none !important; }
+  .mobileShiftEditor, .mobileRequirements, .mobileBottomActions { display: block; }
+  .mobileOriginalPreview { display: block; }
+
+  .content { padding: 20px 14px 46px; }
+  .topbar { gap: 12px; }
+  .topbar strong { font-size: 12px; }
+  .topbar span { font-size: 11px; white-space: nowrap; }
+  .sidebar { gap: 8px; padding: 12px; }
+  .sidebar nav { scrollbar-width: thin; padding-bottom: 5px; }
+  .sidebar nav button { min-height: 44px; flex-shrink: 0; }
+  .sideFoot button { min-width: 44px; min-height: 44px; display: grid; place-items: center; }
+
+  .editorToolbar { margin-bottom: 16px; }
+  .editorToolbar .toolbarActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; gap: 9px; }
+  .editorToolbar .toolbarActions > .status { grid-column: 1 / -1; justify-self: start; }
+  .editorToolbar .toolbarActions > button { min-width: 0; width: 100%; min-height: 44px; padding: 10px; white-space: normal; }
+  .editorToolbar .toolbarActions > button.dangerAction { grid-column: 1 / -1; }
+  .editorToolbar .toolbarActions > .desktopEntrySave,
+  .editorToolbar .toolbarActions > .desktopEntrySubmit { display: none; }
+
+  .mobileShiftEditor { max-width: 760px; margin: 0 auto 20px; }
+  .mobileEntryIntro { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 0 0 16px; }
+  .mobileEyebrow { font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: #66808c; }
+  .mobileEntryIntro h2 { margin: 4px 0 5px; font-size: 23px; color: #243a45; letter-spacing: -.45px; }
+  .mobileEntryIntro p { margin: 0; color: #6e7c86; font-size: 12px; line-height: 1.5; }
+  .mobileCount { flex-shrink: 0; white-space: nowrap; border: 1px solid #d6e2e7; border-radius: 99px; background: #edf4f7; padding: 7px 10px; font-size: 11px; font-weight: 750; color: #425f6e; }
+
+  .mobileSheetDetails { border: 1px solid #dbe4e8; border-radius: 12px; background: #fff; padding: 16px; margin-bottom: 17px; }
+  .mobileIdentity { display: flex; flex-direction: column; gap: 4px; margin-bottom: 15px; border-bottom: 1px solid #edf1f3; padding-bottom: 12px; }
+  .mobileIdentity > span { color: #6c7e88; font-size: 11px; }
+  .mobileIdentity strong { color: #243a46; font-size: 16px; }
+  .mobileMetaGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .mobileMetaGrid label, .mobileShiftFields label, .mobileOfficeGrid label { min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; color: #3a4d58; }
+  .mobileMetaFull { grid-column: 1 / -1; }
+  .mobileMetaGrid input,
+  .mobileShiftFields input, .mobileShiftFields select,
+  .mobileOfficeGrid input { display: block; width: 100%; height: 46px; min-width: 0; padding: 10px 11px; border: 1px solid #cbd6dc; border-radius: 7px; background: #fff; color: #20313c; font-size: 16px; font-weight: 450; line-height: 1.2; -webkit-appearance: none; appearance: none; }
+  .mobileMetaGrid input:focus-visible, .mobileShiftFields input:focus-visible,
+  .mobileShiftFields select:focus-visible, .mobileOfficeGrid input:focus-visible { outline: 2px solid #407b98; outline-offset: 1px; border-color: #407b98; }
+  .mobileMetaGrid input:disabled, .mobileShiftFields input:disabled,
+  .mobileShiftFields select:disabled, .mobileOfficeGrid input:disabled { background: #f4f6f7; opacity: 1; color: #5a6971; -webkit-text-fill-color: #5a6971; }
+
+  .mobileShiftList { display: grid; gap: 10px; }
+  .mobileShiftCard { background: white; border: 1px solid #dbe4e8; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 7px rgba(30, 50, 60, .025); }
+  .mobileShiftCard.isExpanded { border-color: #adc5d2; box-shadow: 0 4px 15px rgba(30, 60, 75, .055); }
+  .mobileShiftToggle { display: flex; width: 100%; min-height: 70px; align-items: center; gap: 10px; padding: 13px 13px; background: transparent; color: #273a46; border: 0; text-align: left; }
+  .mobileShiftToggle:focus-visible { outline: 2px solid #407b98; outline-offset: -3px; }
+  .mobileShiftToggle > svg { color: #6d8390; flex-shrink: 0; }
+  .mobileShiftNumber { width: 34px; height: 34px; flex-shrink: 0; border-radius: 10px; display: grid; place-items: center; background: #e9f1f5; color: #315160; font-weight: 800; font-size: 13px; }
+  .mobileShiftSummary { min-width: 0; flex: 1; }
+  .mobileShiftSummary strong { display: block; font-size: 13px; margin-bottom: 4px; }
+  .mobileShiftSummary small { display: block; color: #6e808a; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+  .mobileShiftState { flex-shrink: 0; border-radius: 99px; padding: 5px 8px; font-size: 10px; font-weight: 750; color: #396a52; background: #e1f5e9; }
+  .mobileShiftState.isIncomplete { color: #926321; background: #fff0cf; }
+  .mobileShiftState.isBlank { color: #637783; background: #edf1f3; }
+  .mobileShiftBody { padding: 16px; border-top: 1px solid #edf0f2; }
+  .mobileShiftFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 13px; row-gap: 16px; }
+  .mobileShiftFields .mobileField-date, .mobileShiftFields .mobileField-location,
+  .mobileShiftFields .mobileField-commute, .mobileShiftFields .mobileField-swipe { grid-column: 1 / -1; }
+  .requiredStar { color: #ad4142; }
+  /* Preserve native iOS date/month pickers and recognisable select arrows. */
+  .mobileShiftBody input[type="date"], .mobileMetaGrid input[type="month"] { color-scheme: light; -webkit-appearance: auto; appearance: auto; }
+  .mobileShiftFields select { -webkit-appearance: menulist; appearance: auto; }
+  .mobileOfficeDetails { border-top: 1px solid #e7edef; margin-top: 19px; padding-top: 13px; }
+  .mobileOfficeDetails > summary { cursor: pointer; color: #55707e; font-weight: 700; font-size: 12px; padding: 9px 0; }
+  .mobileOfficeGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; margin-top: 13px; }
+  .mobileOfficeGrid input { font-size: 15px; }
+  .mobileRowActions { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-top: 1px solid #e8edef; margin-top: 19px; padding-top: 15px; }
+  .mobileRowActions button { min-height: 42px; }
+  .mobileRemove { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #ecc7c5; border-radius: 7px; background: #fff7f7; color: #ad464a; padding: 9px 12px; font-size: 12px; font-weight: 700; }
+  .mobileAddShift { width: 100%; min-height: 50px; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 13px; background: #eaf2f5; border: 1px dashed #a7c1cf; border-radius: 10px; color: #2a4a5b; font-weight: 750; font-size: 13px; }
+  .mobileRowHint { color: #687985; font-size: 11px; line-height: 1.5; text-align: center; margin: 12px 0 14px; }
+  .mobileEmpty { padding: 20px; border: 1px dashed #c6d5dc; border-radius: 10px; color: #657782; text-align: center; font-size: 13px; }
+  .mobileOriginalToggle { width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; min-height: 45px; border: 1px solid #cad8dd; border-radius: 8px; background: #fff; color: #3e6071; font-weight: 700; font-size: 12px; }
+
+  .mobileOriginalPreview { max-width: 760px; margin: 0 auto 20px; }
+  .mobileOriginalPreview > p { font-size: 12px; color: #687b88; margin: 0 0 10px; line-height: 1.5; }
+  .mobilePreviewViewport { overflow-x: auto; overflow-y: hidden; background: #e5ecee; border: 1px solid #d1dee3; border-radius: 9px; padding: 11px; -webkit-overflow-scrolling: touch; }
+  .mobilePreviewPage { box-sizing: border-box; min-width: 1000px; width: 1000px; padding: 15px 17px; margin: 0 0 12px; }
+  .mobilePreviewPage:last-child { margin-bottom: 0; }
+  .mobilePreviewPage .sheetHeader, .mobilePreviewPage .sheetInstructions,
+  .mobilePreviewPage .sheetTop, .mobilePreviewPage .timesheetTable,
+  .mobilePreviewPage .sheetFooter { min-width: 0; }
+
+  .mobileRequirements { max-width: 760px; margin: 0 auto 17px; background: white; border: 1px solid #dce5e9; border-radius: 10px; overflow: hidden; }
+  .mobileRequirements > button { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 14px; background: white; border: 0; color: #354f5d; font-weight: 700; font-size: 12px; text-align: left; }
+  .mobileRequirementsBody { padding: 0 15px 15px; color: #4b606b; font-size: 12px; line-height: 1.6; }
+  .mobileRequirementsBody ol { padding-left: 20px; }
+  .mobileRequirementsBody li { margin: 7px 0; }
+  .mobileRequirementsBody p { margin: 8px 0; }
+  .mobileTransportNote { background: #fff0cb; color: #6c5521; border-radius: 4px; padding: 7px 9px; }
+
+  .declarationBox, .officeInputs, .reviewPanel { max-width: 760px; margin: 18px auto 0; padding: 17px; background: #fff; }
+  .declarationBox h3, .officeInputs h3 { font-size: 17px; }
+  .declarationBox .checkline { align-items: flex-start; gap: 12px; line-height: 1.5; margin: 17px 0; }
+  .declarationBox .checkline input { flex-shrink: 0; width: 20px; height: 20px; margin: 1px 0 0; }
+  .declarationBox .inlineFields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .declarationBox .inlineFields label { min-width: 0; }
+  .declarationBox input:not([type="checkbox"]), .officeInputs input, .officeInputs textarea, .reviewPanel textarea { font-size: 16px; min-height: 45px; min-width: 0; width: 100%; }
+  .officeInputs .inlineFields { flex-direction: column; }
+  .officeInputs .inlineFields label { width: 100%; }
+  .reviewActions { flex-direction: column; align-items: stretch; }
+  .reviewActions button { min-height: 46px; width: 100%; }
+
+  .mobileBottomActions { max-width: 760px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 17px auto 0; padding-bottom: 12px; }
+  .mobileBottomActions button { min-width: 0; min-height: 48px; padding: 12px 8px; }
+  .mobileBottomActions button:only-child { grid-column: 1 / -1; }
+
+  /* List, status, and modal layouts should be comfortable on narrow phones. */
+  .historyList { overflow: visible; }
+  .historyItem { flex-wrap: wrap; gap: 11px; }
+  .historyItem .historyTitle { flex: 1 1 calc(100% - 70px); }
+  .historyItem > .status { margin-left: 0; }
+  .historyItem .historyActions { flex: 1 1 100%; justify-content: flex-end; }
+  .historyActions button { min-height: 40px; }
+  .staffAdmin .modalPanel { padding: 18px; }
+}
+
+@media (max-width: 420px) {
+  .mobileEntryIntro { align-items: flex-start; }
+  .mobileCount { margin-top: 16px; }
+  .mobileShiftToggle { padding: 11px 9px; gap: 7px; }
+  .mobileShiftNumber { width: 29px; height: 29px; }
+  .mobileShiftState { font-size: 9px; padding: 4px 6px; }
+  .mobileShiftBody { padding: 14px 12px; }
+  .mobileShiftFields { column-gap: 9px; }
+  .mobileRowActions { flex-direction: column; }
+  .mobileRowActions button { width: 100%; justify-content: center; }
+  .editorToolbar .toolbarActions { gap: 7px; }
+  .editorToolbar .toolbarActions > button { font-size: 12px; }
+  .topbar span { display: none; }
+}
+
+/* The print renderer is the original form. Never print the mobile cards or
+   on-screen declaration a second time, even if the user prints from Safari. */
+@media print {
+  .mobileShiftEditor, .mobileOriginalPreview, .mobileRequirements,
+  .mobileBottomActions, .declarationBox, .officeInputs, .reviewPanel { display: none !important; }
+  .screenPaper { display: none !important; }
+  .printOnly { display: block !important; }
+}
