@@ -631,7 +631,7 @@
 .sessionExpiryDescription { margin: 22px 0 10px; font-size: 14px; line-height: 1.65; }
 .sessionExpiryCountdown {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: center;
   gap: 10px;
   margin: 13px 0;
@@ -648,7 +648,14 @@
 .sessionExpiryActions { display: flex; gap: 9px; justify-content: flex-end; }
 .sessionExpiryActions button { min-height: 43px; white-space: nowrap; }
 .sessionExpiryContinue { flex: 1.15; }
-.sessionExpiryLogout { flex: 1; }
+.sessionExpiryLogout {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
 .sessionExpiryDialog button:focus-visible { outline: 3px solid #5991ab; outline-offset: 3px; }
 @media (max-width: 440px) {
   .sessionExpiryDialog { padding: 19px; }
