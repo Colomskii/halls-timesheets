@@ -544,3 +544,47 @@
   .mobileMetaGrid .mobileMetaFull { grid-column: auto; }
   .mobileOfficeGrid { grid-template-columns: minmax(0, 1fr); }
 }
+
+
+/* v0.9: inline 24-hour time entry, native mobile picker, and review scopes */
+.timesheetScope{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 16px;}
+.timesheetScope button{border:1px solid #c8d5dc;background:#fff;color:#38515e;border-radius:7px;padding:9px 14px;font-size:13px;font-weight:700;}
+.timesheetScope button.active{background:#243b46;color:#fff;border-color:#243b46;}
+.clockEntry{min-width:0;width:100%;height:100%;display:flex;align-items:stretch;position:relative;background:#fff;}
+.clockEntry .clockDigits{display:block;width:100%;min-width:0;flex:1;box-sizing:border-box;border:0;background:transparent;padding:3px;color:#23333c;font:inherit;letter-spacing:.02em;}
+.clockEntry .clockDigits:focus{outline:2px solid #407b98;outline-offset:-2px;}
+.clockEntry.clockInvalid .clockDigits:not(:focus){background:#fff5ed;}
+.clockNativeWrap{display:none;}
+.clockDesktop .clockDigits{height:27px;font-size:10px;padding:2px;}
+@media(max-width:900px){
+  .mobileShiftFields .clockEntry{height:48px;width:100%;overflow:hidden;border:1px solid #c8d4da;border-radius:7px;background:#fff;}
+  .mobileShiftFields .clockDigits{height:46px!important;min-height:0!important;max-height:none!important;border:0!important;border-radius:0!important;padding:0 10px!important;font-size:16px!important;line-height:46px!important;min-width:0!important;}
+  .mobileShiftFields .clockNativeWrap{display:grid;place-items:center;flex:none;position:relative;width:47px;min-width:47px;height:46px;border-left:1px solid #d4dfe4;background:#edf3f5;color:#2d4957;overflow:hidden;}
+  .mobileShiftFields .clockNativeWrap input[type=time]{position:absolute!important;inset:0!important;width:100%!important;max-width:100%!important;min-width:0!important;height:100%!important;max-height:none!important;padding:0!important;margin:0!important;border:0!important;opacity:0!important;z-index:2;cursor:pointer;pointer-events:auto;-webkit-appearance:none;appearance:none;}
+  .mobileShiftFields .clockEntry.clockInvalid{border-color:#bf764b;background:#fff5ed;}
+  .timesheetScope{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;}
+  .timesheetScope button{font-size:11px;padding:9px 5px;min-width:0;}
+}
+@media print{.timesheetScope,.clockNativeWrap{display:none!important;}}
+
+/* Final native-print fallback if the popup is blocked. Normal printing uses
+   the self-contained A4 stylesheet inside the isolated preview window. */
+@page { size: A4 landscape; margin: 6mm; }
+@media print {
+  html, body, #root { width:100%!important; height:auto!important; min-height:0!important; padding:0!important; margin:0!important; background:white!important; }
+  .shell, .mainArea, .content { display:block!important; height:auto!important; min-height:0!important; padding:0!important; margin:0!important; max-width:none!important; }
+  .sidebar, .topbar, .pageHead, .reviewPanel, .alert, .screenPaper, .historyList, .staffTable, .notice,
+  .filterLine, .timesheetScope, .mobileShiftEditor, .mobileOriginalPreview, .mobileRequirements,
+  .mobileBottomActions, .declarationBox, .officeInputs { display:none!important; }
+  .printOnly { display:block!important; }
+  .paper.printPage { width:100%!important; max-width:none!important; height:auto!important; min-height:0!important;
+    padding:2mm!important; margin:0!important; border:0!important; box-shadow:none!important; overflow:visible!important;
+    break-inside:avoid!important; page-break-inside:avoid!important; break-after:page; page-break-after:always; }
+  .paper.printPage:last-child { break-after:auto; page-break-after:auto; }
+  .paper.printPage .sheetHeader,.paper.printPage .sheetInstructions,.paper.printPage .sheetTop,
+  .paper.printPage .timesheetTable,.paper.printPage .sheetFooter { min-width:0!important; }
+  .paper.printPage .sheetHeader h2 { white-space:normal!important; }
+  .paper.printPage .timesheetTable { width:100%!important; }
+  .paper.printPage .sheetFooter { break-inside:avoid-page!important; page-break-inside:avoid!important; }
+  .printOnly * { print-color-adjust:exact!important; -webkit-print-color-adjust:exact!important; }
+}
