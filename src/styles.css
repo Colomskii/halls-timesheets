@@ -43,3 +43,100 @@
   .printPage .sheetFooter { break-inside: avoid-page; page-break-inside: avoid; }
   .printOnly * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+
+/* v0.4: employee return feedback and administrator-confirmed deletion */
+.returnNotePanel {
+  border: 1px solid #dfb873;
+  border-left: 4px solid #ba8331;
+  border-radius: 8px;
+  background: #fff8e9;
+  padding: 16px 19px;
+  margin: 0 0 20px;
+  color: #65441e;
+}
+.returnNoteHeading { display: flex; align-items: center; gap: 9px; font-size: 14px; }
+.returnNotePanel p { margin: 10px 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; font-size: 14px; }
+.returnNotePanel small { color: #785c36; font-size: 12px; line-height: 1.45; }
+.returnNoteInList { display: flex; align-items: flex-start; gap: 7px; margin-top: 9px; color: #855c25; font-size: 12px; line-height: 1.4; }
+.returnNoteInList svg { flex: 0 0 auto; margin-top: 1px; }
+.returnNoteInList span { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.returnNoteInList strong { display: inline; font-size: inherit; }
+.historyActions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
+.dangerAction { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 12px; border: 1px solid #d8a4a3; background: #fff7f6; color: #a1282e; border-radius: 7px; font-weight: 650; font-size: 13px; cursor: pointer; }
+.dangerAction:hover:not(:disabled) { background: #fde9e7; border-color: #c77b7c; }
+.dangerAction:focus-visible { outline: 3px solid #cc7d7f; outline-offset: 2px; }
+@media (max-width: 650px) {
+  .historyItem { flex-wrap: wrap; }
+  .historyTitle { flex-basis: calc(100% - 70px); }
+  .historyActions { width: 100%; justify-content: flex-end; }
+}
+
+/* Ask browsers for A4 landscape for both the regular and isolated print flows.
+   The device/browser print dialogue can still override page orientation. */
+@page { size: A4 landscape; margin: 6mm; }
+@media print {
+  .returnNotePanel, .historyActions, .returnNoteInList, .dangerAction { display: none !important; }
+  .printOnly, .printPage { page-break-inside: avoid; }
+}
+
+
+/* v0.5: offscreen A4 page staging used only during one-click PDF generation.
+   This mirrors the isolated Print view while retaining predictable page sizing. */
+.pdfExportSandbox {
+  position: fixed !important;
+  left: 0 !important;
+  top: 0 !important;
+  z-index: -1 !important;
+  pointer-events: none !important;
+  width: 285mm !important; /* A4 landscape width minus 6 mm margins */
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #fff !important;
+  color: #101820 !important;
+  font-family: Arial, Helvetica, sans-serif !important;
+}
+.pdfExportSandbox .paper.printPage {
+  display: block !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 2mm !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  background: #fff !important;
+}
+.pdfExportSandbox .sheetHeader,
+.pdfExportSandbox .sheetInstructions,
+.pdfExportSandbox .sheetTop,
+.pdfExportSandbox .timesheetTable,
+.pdfExportSandbox .sheetFooter {
+  min-width: 0 !important;
+}
+.pdfExportSandbox .sheetHeader { min-height: 42px; height: 42px; }
+.pdfExportSandbox .sheetHeader h2 {
+  font-size: 14px !important;
+  white-space: normal !important;
+}
+.pdfExportSandbox .sheetInstructions {
+  margin-bottom: 12px !important;
+  font-size: 9px !important;
+}
+.pdfExportSandbox .sheetTop { min-height: 34px !important; }
+.pdfExportSandbox .timesheetTable { width: 100% !important; }
+.pdfExportSandbox .timesheetTable th { height: 42px !important; font-size: 8px !important; }
+.pdfExportSandbox .timesheetTable td { height: 36px !important; font-size: 10px !important; padding: 4px !important; }
+.pdfExportSandbox .sheetFooter {
+  margin-top: 6px !important;
+  min-height: 124px !important;
+  font-size: 9px !important;
+}
+.pdfExportSandbox .paperTopEntries label,
+.pdfExportSandbox .managerBox { font-size: 9px !important; }

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { auth, db, isConfigured } from './firebase';
-import { Plus, Printer, FileText, LogOut, Users, ClipboardList, ArrowLeft, Save, Send, Check, RotateCcw, Trash2, Settings } from 'lucide-react';
+import { Plus, Printer, Download, FileText, LogOut, Users, ClipboardList, ArrowLeft, Save, Send, Check, RotateCcw, Trash2, Settings } from 'lucide-react';
 import StaffRegister from './StaffRegister';
 import AccountSettings from './AccountSettings';
 
@@ -78,7 +78,7 @@ function openTimesheetPrintView() {
   try {
     const printDoc = preview.document;
     printDoc.open();
-    printDoc.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Hall's Timesheets - Print</title></head><body class="timesheet-print-window"><div class="printToolbar"><span>Hall's Timesheets · Print preview</span><div><button id="timesheetPrintAction" type="button">Print / Save as PDF</button><button id="timesheetCloseAction" type="button">Close</button></div></div><main id="printMount"></main></body></html>`);
+    printDoc.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Hall's Timesheets - Print</title></head><body class="timesheet-print-window"><div class="printToolbar"><span>Hall's Timesheets · A4 landscape print preview</span><div><button id="timesheetPrintAction" type="button">Print / Save as PDF</button><button id="timesheetCloseAction" type="button">Close</button></div></div><main id="printMount"></main></body></html>`);
     printDoc.close();
 
     // Reuse the site's compiled Vite stylesheet and the already-rendered,
@@ -106,7 +106,7 @@ function openTimesheetPrintView() {
         padding:10px 14px; font:600 13px Arial,sans-serif; cursor:pointer; }
       .timesheet-print-window .printPage { width:min(1120px,calc(100% - 32px));
         min-height:0; margin:18px auto; padding:16px; }
-      @page { size:A4 landscape; margin:6mm; }
+      @page { size: A4 landscape; margin: 6mm; }
       @media print {
         html, body, #printMount { background:white !important; width:100% !important;
           height:auto !important; min-height:0 !important; padding:0 !important; margin:0 !important; }
@@ -161,18 +161,138 @@ function openTimesheetPrintView() {
   }
 }
 
+// Download the already-rendered printable pages as a genuine A4-landscape PDF.
+// Each printPage maps to exactly one PDF page (nine shift entries per page).
+// The PDF is generated entirely in the user's browser; no data is uploaded.
+async function downloadTimesheetPdf(sheet) {
+  // Commit the native Safari date input when the button is clicked.
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  const printablePages = Array.from(document.querySelectorAll('.printOnly .printPage'));
+  if (!printablePages.length) throw new Error('The printable timesheet is not available. Open it and try again.');
+
+  // Loading the libraries only on demand keeps the normal application lightweight.
+  // Install once with: npm install jspdf html2canvas
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+    import('html2canvas'), import('jspdf')
+  ]);
+
+  const exportRoot = document.createElement('div');
+  exportRoot.className = 'pdfExportSandbox';
+  exportRoot.setAttribute('aria-hidden', 'true');
+  printablePages.forEach(page => exportRoot.appendChild(page.cloneNode(true)));
+  document.body.appendChild(exportRoot);
+
+  try {
+    if (document.fonts?.ready) await document.fonts.ready;
+
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+    const pageWidth = 297;
+    const pageHeight = 210;
+    const margin = 6;
+    const contentWidth = pageWidth - margin * 2;
+    const contentHeight = pageHeight - margin * 2;
+    const exportPages = Array.from(exportRoot.querySelectorAll('.printPage'));
+
+    for (let index = 0; index < exportPages.length; index += 1) {
+      const page = exportPages[index];
+      if (!page.getBoundingClientRect().width) {
+        throw new Error('Could not measure the timesheet page for PDF export.');
+      }
+      const canvas = await html2canvas(page, {
+        backgroundColor: '#ffffff',
+        scale: 2.5,
+        useCORS: false,
+        logging: false,
+        scrollX: 0,
+        scrollY: -window.scrollY,
+        windowWidth: Math.max(window.innerWidth, 1140),
+        // Stage the original behind the app, but bring it forward inside the
+        // isolated canvas clone so it always renders even when occluded.
+        onclone: clonedDocument => {
+          const clonedRoot = clonedDocument.querySelector('.pdfExportSandbox');
+          if (clonedRoot) {
+            clonedRoot.style.zIndex = '999999';
+            clonedRoot.style.position = 'absolute';
+            clonedRoot.style.left = '0';
+            clonedRoot.style.top = '0';
+          }
+        },
+      });
+      if (!canvas.width || !canvas.height) {
+        throw new Error(`Unable to render PDF page ${index + 1}.`);
+      }
+      if (index > 0) pdf.addPage('a4', 'landscape');
+
+      // Fit each complete, printable timesheet page inside an A4 landscape page.
+      // This avoids accidental extra pages and retains the form's relative layout.
+      const scale = Math.min(contentWidth / canvas.width, contentHeight / canvas.height);
+      const width = canvas.width * scale;
+      const height = canvas.height * scale;
+      pdf.addImage(
+        canvas.toDataURL('image/jpeg', 0.94), 'JPEG',
+        (pageWidth - width) / 2, margin, width, height,
+        undefined, 'FAST'
+      );
+    }
+
+    const safeName = String(sheet?.employeeName || 'Employee')
+      .trim().replace(/[^a-z0-9 _-]/gi, '').replace(/\s+/g, '_') || 'Employee';
+    const safePeriod = /^\d{4}-\d{2}$/.test(sheet?.period || '') ? sheet.period : 'Timesheet';
+    pdf.save(`Halls_Timesheet_${safeName}_${safePeriod}.pdf`);
+  } finally {
+    exportRoot.remove();
+  }
+}
+
 function LogButton({children,...props}){return <button className="btn" {...props}>{children}</button>}
 function App(){
  const [session,setSession]=useState(undefined),[profile,setProfile]=useState(null),[authError,setAuthError]=useState(''),[loginName,setLoginName]=useState(''),[password,setPassword]=useState('');
- const [view,setView]=useState('history'),[sheets,setSheets]=useState([]),[staff,setStaff]=useState([]),[selected,setSelected]=useState(null),[editor,setEditor]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[filterEmployee,setFilterEmployee]=useState('all');
+ const [view,setView]=useState('history'),[sheets,setSheets]=useState([]),[staff,setStaff]=useState([]),[selected,setSelected]=useState(null),[editor,setEditor]=useState(null),[busy,setBusy]=useState(false),[pdfBusy,setPdfBusy]=useState(false),[error,setError]=useState(''),[filterEmployee,setFilterEmployee]=useState('all');
  useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,async user=>{setSession(user);setProfile(null);if(user){try{const snap=await getDoc(doc(db,'users',user.uid));setProfile(snap.exists()?snap.data():{missing:true});}catch(e){setProfile({missing:true});setAuthError(e.message)}}});},[]);
  useEffect(()=>{if(!session||!profile||profile.missing||profile.active!==true)return; const isAdmin=profile.role==='admin';const q=isAdmin?query(collection(db,'timesheets')):query(collection(db,'timesheets'),where('employeeId','==',session.uid));const unsub=onSnapshot(q,s=>setSheets(s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0))),e=>setError(e.message));return unsub;},[session,profile]);
  useEffect(()=>{if(!session||profile?.role!=='admin')return;return onSnapshot(collection(db,'staffDirectory'),s=>setStaff(s.docs.map(d=>({uid:d.id,...d.data()})).sort((a,b)=>a.displayName.localeCompare(b.displayName))),e=>setError(e.message));},[session,profile]);
  async function login(e){e.preventDefault();setAuthError('');try{const email=loginName.includes('@')?loginName.trim():`${loginName.trim().toLowerCase()}@halls-timesheets.local`;await signInWithEmailAndPassword(auth,email,password);}catch(e){setAuthError('Login failed. Check your username and password.')}}
  function openEditor(sheet){setSelected(sheet?.id||null);setEditor(sheet?{...sheet,rows:safeRows(sheet.rows).map(r=>({...r,id:r.id||crypto.randomUUID()}))}:blankSheet(profile));setView('editor');setError('')}
- async function audit(action,id){try{await addDoc(collection(db,'auditLogs'),{action,timesheetId:id,actorUid:session.uid,timestamp:serverTimestamp()});}catch(e){console.warn('Audit logging failed:',e.message)}}
+ async function audit(action,id,details={}){try{await addDoc(collection(db,'auditLogs'),{action,timesheetId:id,actorUid:session.uid,timestamp:serverTimestamp(),...details});}catch(e){console.warn('Audit logging failed:',e.message)}}
  async function saveSheet(submit=false){if(!editor)return;setBusy(true);setError('');try{const data=sanitize({...editor,rows:currentFormRows(editor.rows),status:submit?'submitted':editor.status==='returned'?'draft':editor.status});if(submit){validateShiftRows(data.rows);if(!data.declarationAccepted||!data.declarationName)throw new Error('Please complete the declaration before submitting.');data.submittedAt=serverTimestamp();}const id=selected;if(id){const updates={...data,updatedAt:serverTimestamp()};delete updates.employeeId;delete updates.employeeName;await updateDoc(doc(db,'timesheets',id),updates);await audit(submit?'submit':'save',id);}else{const ref=await addDoc(collection(db,'timesheets'),{...data,status:'draft',createdAt:serverTimestamp(),updatedAt:serverTimestamp()});if(submit){await updateDoc(ref,{status:'submitted',submittedAt:serverTimestamp()});}await audit(submit?'submit':'create',ref.id);}setEditor(null);setView('history');}catch(e){setError(e.message)}finally{setBusy(false)}}
  async function review(status){setBusy(true);setError('');try{if(status==='returned'&&!editor.reviewNote?.trim())throw new Error('Enter a reason for returning this timesheet.');await updateDoc(doc(db,'timesheets',selected),{status,reviewNote:editor.reviewNote||'',managerName:editor.managerName||'',managerDate:editor.managerDate||'',managerSignature:editor.managerSignature||'',officeNote:editor.officeNote||'',rows:editor.rows,reviewedBy:session.uid,reviewedAt:serverTimestamp(),updatedAt:serverTimestamp()});await audit(status,selected);setView('history');setEditor(null);}catch(e){setError(e.message)}finally{setBusy(false)}}
+ async function deleteTimesheet(sheet) {
+   // The database rules must separately enforce administrator-only deletion.
+   if (profile?.role !== 'admin' || !sheet?.id || busy) return;
+   const employee = sheet.employeeName || 'this employee';
+   const period = displayPeriod(sheet.period);
+   const confirmed = window.confirm(
+     `Permanently delete ${employee}'s timesheet for ${period}?\n\n` +
+     'This will remove the timesheet and its review notes for all users. This cannot be undone.'
+   );
+   if (!confirmed) return;
+   setBusy(true);
+   setError('');
+   try {
+     await deleteDoc(doc(db, 'timesheets', sheet.id));
+     await audit('delete', sheet.id, {
+       employeeId: sheet.employeeId || '',
+       employeeName: employee,
+       period: sheet.period || '',
+       previousStatus: sheet.status || ''
+     });
+     if (selected === sheet.id) {
+       setSelected(null);
+       setEditor(null);
+       setView('history');
+     }
+   } catch (e) {
+     console.error('Failed to delete timesheet:', e);
+     setError(e.code === 'permission-denied'
+       ? 'Firestore denied deletion. Check that the timesheets security rules allow administrators to delete records.'
+       : `Timesheet could not be deleted: ${e.message}`);
+   } finally {
+     setBusy(false);
+   }
+ }
+
  const isAdmin=profile?.role==='admin';const visibleSheets=sheets.filter(s=>filterEmployee==='all'||s.employeeId===filterEmployee);
  if(!isConfigured)return <main className="setup"><h1>Hall's Timesheets</h1><p>Firebase configuration is missing. Copy <code>.env.example</code> to <code>.env</code>, enter your Firebase web-app configuration and restart Vite.</p></main>;
  if(session===undefined)return <main className="setup">Checking session…</main>;
@@ -180,10 +300,10 @@ function App(){
  if(!profile)return <main className="setup">Loading employee account…</main>;
  if(profile.missing||!profile.active)return <main className="setup"><h2>Account not activated</h2><p>Your login exists, but no active employee profile has been linked to it. Contact an administrator to activate your employee account.</p><button onClick={()=>signOut(auth)}>Sign out</button></main>;
  return <div className="shell"><aside className="sidebar"><div className="sideBrand"><ClipboardList size={24}/><div><strong>HALL'S</strong><small>TIMESHEETS</small></div></div><nav><button className={view==='history'?'active':''} onClick={()=>{setView('history');setError('')}}><FileText size={17}/> {isAdmin?'Timesheets':'My timesheets'}</button><button className={view==='editor'?'active':''} onClick={()=>openEditor(null)}><Plus size={17}/> New timesheet</button>{isAdmin&&<button className={view==='staff'?'active':''} onClick={()=>setView('staff')}><Users size={17}/> Employee register</button>}<button className={view==='account'?'active':''} onClick={()=>setView('account')}><Settings size={17}/> Account settings</button></nav><div className="sideFoot"><span>{profile.displayName}<small>{isAdmin?'Administrator':'Employee'}</small></span><button onClick={()=>signOut(auth)} title="Sign out"><LogOut size={18}/></button></div></aside><div className="mainArea"><header className="topbar"><strong>Fatigue Risk Management</strong><span>HB.FRM.82 · Rev 10</span></header><main className="content">{error&&<div className="alert error">{error}<button onClick={()=>setError('')}>×</button></div>}
- {view==='history'&&<><div className="pageHead"><div><h1>{isAdmin?'Submitted timesheets':'My timesheets'}</h1><p>Access saved, submitted and historical records.</p></div><LogButton onClick={()=>openEditor(null)}><Plus size={16}/> New timesheet</LogButton></div>{isAdmin&&<div className="filterLine"><label>Employee <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)}><option value="all">All employees</option>{staff.map(s=><option key={s.uid} value={s.uid}>{s.displayName}</option>)}</select></label></div>}<div className="historyList">{visibleSheets.length===0?<div className="empty">No timesheets found. Select <b>New timesheet</b> to get started.</div>:visibleSheets.map(s=><div className="historyItem" key={s.id}><div className="docSymbol"><FileText size={22}/></div><div className="historyTitle"><strong>{displayPeriod(s.period)}</strong><small>{s.employeeName} · {s.rows?.filter(r=>r.date).length||0} shift entries · {Math.max(1,Math.ceil((s.rows?.filter(r=>r.date).length||0)/9))} printable page(s)</small></div><span className={'status '+s.status}>{s.status}</span><button className="secondary" onClick={()=>openEditor(s)}>View</button></div>)}</div></>}
+ {view==='history'&&<><div className="pageHead"><div><h1>{isAdmin?'Submitted timesheets':'My timesheets'}</h1><p>Access saved, submitted and historical records.</p></div><LogButton onClick={()=>openEditor(null)}><Plus size={16}/> New timesheet</LogButton></div>{isAdmin&&<div className="filterLine"><label>Employee <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)}><option value="all">All employees</option>{staff.map(s=><option key={s.uid} value={s.uid}>{s.displayName}</option>)}</select></label></div>}<div className="historyList">{visibleSheets.length===0?<div className="empty">No timesheets found. Select <b>New timesheet</b> to get started.</div>:visibleSheets.map(s=><div className="historyItem" key={s.id}><div className="docSymbol"><FileText size={22}/></div><div className="historyTitle"><strong>{displayPeriod(s.period)}</strong><small>{s.employeeName} · {s.rows?.filter(r=>r.date).length||0} shift entries · {Math.max(1,Math.ceil((s.rows?.filter(r=>r.date).length||0)/9))} printable page(s)</small>{s.reviewNote?.trim() && ['returned','draft'].includes(s.status) && <div className="returnNoteInList"><RotateCcw size={14} aria-hidden="true"/><span><strong>{s.status==='returned'?'Reason for return':'Previous return note'}:</strong> {s.reviewNote}</span></div>}</div><span className={'status '+s.status}>{s.status}</span><div className="historyActions"><button type="button" className="secondary" onClick={()=>openEditor(s)}>View</button>{isAdmin&&<button type="button" className="dangerAction" disabled={busy} title={`Delete ${s.employeeName}'s timesheet for ${displayPeriod(s.period)}`} aria-label={`Delete ${s.employeeName}'s timesheet for ${displayPeriod(s.period)}`} onClick={()=>deleteTimesheet(s)}><Trash2 size={15}/> Delete</button>}</div></div>)}</div></>}
  {view==='staff'&&isAdmin&&<StaffRegister staff={staff} currentUserUid={session.uid}/>}
  {view==='account'&&<AccountSettings profile={profile}/>}
- {view==='editor'&&editor&&<><div className="pageHead editorToolbar"><div><button className="back" onClick={()=>{setView('history');setEditor(null)}}><ArrowLeft size={16}/> Back to timesheets</button><h1>{selected?'Timesheet':'New timesheet'}</h1><p>{editor.employeeName} · {displayPeriod(editor.period)}</p></div><div className="toolbarActions"><span className={'status '+editor.status}>{editor.status}</span><button type="button" className="secondary" onClick={openTimesheetPrintView}><Printer size={16}/> Print</button>{isEditable(editor)&&!isAdmin&&<><button className="secondary" onClick={()=>saveSheet(false)} disabled={busy}><Save size={16}/> Save draft</button><button className="btn" disabled={busy} onClick={()=>saveSheet(true)}><Send size={16}/> Submit</button></>}{!selected&&isAdmin&&<button className="btn" disabled={busy} onClick={()=>saveSheet(false)}><Save size={16}/> Save draft</button>}</div></div><Timesheet sheet={editor} setSheet={setEditor} editable={(!isAdmin&&isEditable(editor))||(!selected&&isAdmin)} admin={isAdmin} />{isAdmin&&selected&&<div className="reviewPanel"><h2>Manager review</h2><label>Review note<textarea value={editor.reviewNote||''} onChange={e=>setEditor({...editor,reviewNote:e.target.value})} placeholder="Required if returning for correction"/></label><div className="reviewActions"><button disabled={busy} onClick={()=>review('returned')} className="secondary"><RotateCcw size={16}/> Return for correction</button><button disabled={busy} onClick={()=>review('approved')} className="btn"><Check size={16}/> Approve timesheet</button><button disabled={busy} onClick={()=>review('submitted')} className="secondary">Save office fields</button></div></div>}</>}
+ {view==='editor'&&editor&&<><div className="pageHead editorToolbar"><div><button className="back" onClick={()=>{setView('history');setEditor(null)}}><ArrowLeft size={16}/> Back to timesheets</button><h1>{selected?'Timesheet':'New timesheet'}</h1><p>{editor.employeeName} · {displayPeriod(editor.period)}</p></div><div className="toolbarActions"><span className={'status '+editor.status}>{editor.status}</span><button type="button" className="secondary" onClick={openTimesheetPrintView}><Printer size={16}/> Print</button><button type="button" className="secondary" disabled={pdfBusy} onClick={async()=>{setError('');setPdfBusy(true);try{await downloadTimesheetPdf(editor);}catch(e){console.error('PDF export failed:',e);setError(e?.message||'Could not save the timesheet as a PDF.');}finally{setPdfBusy(false);}}}><Download size={16}/> {pdfBusy?'Creating PDF…':'Save PDF'}</button>{isEditable(editor)&&!isAdmin&&<><button className="secondary" onClick={()=>saveSheet(false)} disabled={busy}><Save size={16}/> Save draft</button><button className="btn" disabled={busy} onClick={()=>saveSheet(true)}><Send size={16}/> Submit</button></>}{!selected&&isAdmin&&<button className="btn" disabled={busy} onClick={()=>saveSheet(false)}><Save size={16}/> Save draft</button>}{isAdmin&&selected&&<button type="button" className="dangerAction" disabled={busy} onClick={()=>deleteTimesheet(editor)}><Trash2 size={16}/> Delete timesheet</button>}</div></div>{!isAdmin&&editor.reviewNote?.trim()&&['returned','draft'].includes(editor.status)&&<section className="returnNotePanel" role="note" aria-label="Reason the timesheet was returned"><div className="returnNoteHeading"><RotateCcw size={18} aria-hidden="true"/><strong>{editor.status==='returned'?'Timesheet returned for correction':'Previous return note'}</strong></div><p>{editor.reviewNote}</p><small>{editor.status==='returned'?'Please review the feedback, correct the timesheet and submit it again.':'This note is retained from the previous return so you can refer to it while editing.'}</small></section>}<Timesheet sheet={editor} setSheet={setEditor} editable={(!isAdmin&&isEditable(editor))||(!selected&&isAdmin)} admin={isAdmin} />{isAdmin&&selected&&<div className="reviewPanel"><h2>Manager review</h2><label>Review note<textarea value={editor.reviewNote||''} onChange={e=>setEditor({...editor,reviewNote:e.target.value})} placeholder="Required if returning for correction"/></label><div className="reviewActions"><button disabled={busy} onClick={()=>review('returned')} className="secondary"><RotateCcw size={16}/> Return for correction</button><button disabled={busy} onClick={()=>review('approved')} className="btn"><Check size={16}/> Approve timesheet</button><button disabled={busy} onClick={()=>review('submitted')} className="secondary">Save office fields</button></div></div>}</>}
  </main></div></div>;
 }
 function Timesheet({sheet,setSheet,editable,admin}){
