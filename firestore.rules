@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function hasProfile() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function profile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function active() { return hasProfile() && profile().active == true; }
+    function admin() { return active() && profile().role == 'admin'; }
+    function owner(uid) { return active() && request.auth.uid == uid; }
+    function validRows(d) { return d.rows is list && d.rows.size() <= 250; }
+    function validSheet(d) {
+      return d.keys().hasAll(['employeeId','employeeName','period','status','rows','createdAt','updatedAt'])
+        && d.keys().hasOnly(['employeeId','employeeName','period','weekNo','employmentStatus','status','rows','createdAt','updatedAt','submittedAt','reviewedAt','reviewedBy','reviewNote','declarationAccepted','declarationName','declarationDate','managerName','managerDate','managerSignature','officeNote'])
+        && d.employeeId is string
+        && d.employeeName is string
+        && d.period is string
+        && d.status in ['draft','submitted','returned','approved']
+        && validRows(d);
+    }
+    match /users/{uid} {
+      allow get: if owner(uid) || admin();
+      allow list: if admin();
+      // Profiles are created by an already-authorised administrator or via Firebase Console bootstrap.
+      allow create: if admin() && request.resource.data.keys().hasAll(['role','active','displayName'])
+        && request.resource.data.role in ['staff','admin'];
+      allow update: if admin() && request.resource.data.role in ['staff','admin'];
+      allow delete: if admin();
+    }
+    match /staffDirectory/{uid} {
+      allow get: if owner(uid) || admin();
+      allow list: if admin();
+      allow create, update, delete: if admin();
+    }
+    match /timesheets/{sheetId} {
+      allow get: if active() && (resource.data.employeeId == request.auth.uid || admin());
+      // Firestore rules are not filters. Staff queries must include where('employeeId','==',auth.uid).
+      allow list: if active() && (admin() || resource.data.employeeId == request.auth.uid);
+      allow create: if active()
+        && validSheet(request.resource.data)
+        && request.resource.data.employeeId == request.auth.uid
+        && request.resource.data.employeeName == profile().displayName
+        && request.resource.data.status == 'draft';
+      allow update: if active() && validSheet(request.resource.data) && (
+        // Employees can edit only their own editable forms, and cannot alter identity or review fields.
+        (resource.data.employeeId == request.auth.uid
+          && resource.data.status in ['draft','returned']
+          && request.resource.data.status in ['draft','submitted']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'period','weekNo','employmentStatus','rows','status','updatedAt','submittedAt',
+            'declarationAccepted','declarationName','declarationDate'
+          ])
+          && (request.resource.data.status != 'submitted' ||
+              (request.resource.data.declarationAccepted == true && request.resource.data.rows.size() > 0)))
+        ||
+        // Administrators can review, approve, return and amend sheets. Ownership is immutable.
+        (admin() && request.resource.data.employeeId == resource.data.employeeId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.status in ['draft','submitted','returned','approved'])
+      );
+      allow delete: if admin();
+    }
+    match /auditLogs/{logId} {
+      allow read: if admin();
+      allow create: if active()
+        && request.resource.data.keys().hasAll(['actorUid','action','timesheetId','timestamp'])
+        && request.resource.data.actorUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}
